@@ -26,7 +26,11 @@ from ..newtypes.format_str_tools import (
 my_console = Console()
 
 
-def progress_video_info(console: Console = None) -> Progress:
+def path_styler(path: str) -> str:
+    return path.replace("\\", "/").replace("/", "[bold #ff5c00]/[/]")
+
+
+def progress_video_info(console: Console | None = None) -> Progress:
     return Progress(
         TextColumn(
             "[bright_cyan]{task.description}[/] "
@@ -57,7 +61,7 @@ def group_text_and_progress(
     progress: Progress = None,
 ) -> Group:
     panel = Panel(text, border_style=border_style)
-    return Group(panel, progress)
+    return Group(panel, progress)  # type: ignore[arg-type]
 
 
 def highlight_normal_text(msg: str):
@@ -146,7 +150,7 @@ class LoggerForRich:
         self.console.print(msg, style="bright_red")
 
 
-default_keys_to_show = [
+default_keys_to_show: list[str | tuple[str, Callable[[str | int | float], str]]] = [
     "title",
     ("upload_date", format_date),
     ("view_count", format_number),
@@ -174,25 +178,22 @@ def make_info_table(
     if not keys_to_show:
         keys_to_show = default_keys_to_show
 
-    keys_to_show: list[tuple[str, Callable]] = [
+    new_keys_to_show: list[tuple[str, Callable]] = [
         (key, lambda x: x) if isinstance(key, str) else key for key in keys_to_show
     ]
 
     if sort_by:
-        key_names: list[str] = [
-            (
-                key
-                if not key == sort_by[0]
-                else (
-                    f"[bold bright_magenta]{key}▲[/]"
-                    if not sort_by[1]
-                    else f"[bold bright_magenta]{key}▼[/]"
-                )
-            )
-            for key, func in keys_to_show
-        ]
+        key_names = []
+        for key, _ in new_keys_to_show:
+            if key != sort_by[0]:
+                key_names.append(key)
+            elif sort_by[1] is False:  # 오름차순, 기본값
+                key_names.append(f"[bold bright_magenta]{key}▼[/]")
+            else:  # 내림차순, 뒤집음
+                key_names.append(f"[bold bright_magenta]{key}▲[/]")
+        # key_names: list[str] = [key if not key == sort_by[0] else f"[bold bright_magenta]{key}▲[/]" if not sort_by[1] else f"[bold bright_magenta]{key}▼[/]" for key, _ in new_keys_to_show]
     else:
-        key_names = [key for key, fuck in keys_to_show]
+        key_names = [key for key, _ in new_keys_to_show]
     headers = [Column(header="index", min_width=4)] + [
         Column(header=key, min_width=11) for key in key_names
     ]

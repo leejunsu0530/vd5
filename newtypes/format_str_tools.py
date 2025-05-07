@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Callable, Any
 
 
-def _try_and_return(func):
+def _try_and_return(func: Callable[[Any], Any]):
     """성공하면 수정해서, 실패하면 그대로"""
 
     def wrapper(*args, **kwargs):
@@ -14,6 +15,7 @@ def _try_and_return(func):
     return wrapper
 
 
+@_try_and_return
 def format_filename(input_string: str) -> str:
     invalid_to_fullwidth: dict[str, str] = {
         '<': '＜',  # U+FF1C
@@ -36,8 +38,9 @@ def format_filename(input_string: str) -> str:
 
 @_try_and_return
 def format_number(num: int | str) -> str:
-    num = int(num)
     """4자리마다 ,로 끊음"""
+    num = int(num)
+
     num_str = str(num)[::-1]  # Reverse the string
     grouped = ",".join(num_str[i:i + 4] for i in range(0, len(num_str), 4))
     return grouped[::-1]  # Reverse it back
@@ -63,7 +66,8 @@ def format_time(seconds: float | int | str, return_int: bool = True) -> str:
             return f"{int(minutes):02}:{sec:02}"  # mm:ss.SS
     else:
         if hours >= 1:
-            return f"{int(hours):02}:{int(minutes):02}:{sec:05.2f}"  # hh:mm:ss.SS
+            # hh:mm:ss.SS
+            return f"{int(hours):02}:{int(minutes):02}:{sec:05.2f}"
         else:
             return f"{int(minutes):02}:{sec:05.2f}"  # mm:ss.SS
 

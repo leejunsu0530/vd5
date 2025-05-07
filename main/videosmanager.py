@@ -22,7 +22,6 @@ from ..ydl.ydl_tools import (
     change_video_dict_list,
     download_music,
     download_video,
-    EmbedMetadata,
 )
 from ..ydl.youtube_url_tools import find_id
 from ..ydl.extcolors_from_thumbnail import (
@@ -40,7 +39,8 @@ from .rich_vd4 import (
     make_info_table,
     group_text_and_progress,
 )
-from .videos import Videos, MAJOR_KEYS, InfoDict
+from .videos import Videos
+from ..newtypes.new_types import MAJOR_KEYS, InfoDict
 
 install(show_locals=True)
 
@@ -103,7 +103,7 @@ class VideosManager:
                 cannot_download: list[dict] = []
                 # "private", "premium_only", "subscriber_only", "needs_auth", "unlisted" or "public"
                 entries = [
-                    entry for entry in entries if videos.video_bring_restrict(entry)
+                    entry for entry in entries if videos.video_bring_restrict(entry) #type:ignore
                 ]  # 조건에 맞지 않으면 리스트에서 제거
                 cannot_download = [
                     entry

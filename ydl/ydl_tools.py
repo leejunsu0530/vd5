@@ -1,9 +1,10 @@
 import os
 import traceback
-from typing import Callable
-import yt_dlp
+from typing import Callable, Any, LiteralString
+import yt_dlp  # type:ignore
 
 from ..newtypes.format_str_tools import format_filename
+from ..newtypes.new_types import VideoInfoDict, PlaylistInfoDict, ChannelInfoDict, EntryInPlaylist
 
 from .timestamp_parser import parse_chapters
 
@@ -21,45 +22,39 @@ class ExtractChapter(yt_dlp.postprocessor.PostProcessor):
     """
 
     # ℹ️ See help(yt_dlp.postprocessor.PostProcessor)
-    def run(self, information: dict):
-        if information.get("chapters"):
+    def run(self, information: VideoInfoDict):
+        chapters = information.get("chapters")
+        if chapters:
             self.to_screen(
-                f"Already have chapters:{[chapter.get('title') for chapter in information.get('chapters')]}"
+                f"Already have chapters:{[chapter.get('title') for chapter in chapters]}"
             )
             return [], information
 
         video_duration = information.get("duration", None)
 
         # 설명란에서 추가
-        description: str = information.get("description")
-        chapters = parse_chapters(description, video_duration)
-        information["meta_comment"] = (
-            description  # 원본을 코멘트에 추가. 밑에 챕터 나오면 그걸로 덮어씌워짐
-        )
-        if (
-            chapters and len(chapters) >= 3
-        ):  # 설명란에 챕터가 있다면 그건 진짜 챕터니까 갯수 확인 필요 없음
-            information["chapters"] = chapters
-            self.to_screen(
-                f"Embedded chapters from description:{[chapter.get('title') for chapter in chapters]}"
-            )
-            return [], information
+        description = information.get("description")
+        if description:
+            chapters = parse_chapters(description, video_duration)
+            # 밑에 챕터 나오면 그걸로 덮어씌워짐. 기본 설명은 url인데 디스크립션으로 바꾸고(메타 디스크립션은 설명 그대로 삽입) 챕터를 다른 부분에서 찾으면 그걸로 변경
+            information["meta_comment"] = description
+            if chapters:
+                information["chapters"] = chapters
+                self.to_screen(
+                    f"Embedded chapters from description:{[chapter.get('title') for chapter in chapters]}")
+                return [], information
 
         # 댓글에서 추가
-        comments: list[dict] = information.get("comments")
+        comments = information.get("comments")
         if not comments:
             self.to_screen("Comment doesn't exists")
             return [], information
 
         for comment in comments:
             chapters = parse_chapters(comment.get("text", ""), video_duration)
-            if (
-                chapters and len(chapters) >= 5
-            ):  # 길이 제한은 이거 기준으로 노래를 나눌거기 때문에
+            if chapters:
                 information["chapters"] = chapters
-                information["meta_comment"] = comment.get(
-                    "text", ""
-                )  # 원본을 코멘트에 추가
+                information["meta_comment"] = comment.get("text", "")
                 self.to_screen(
                     f"Embedded chapters from comment:{[chapter.get('title') for chapter in chapters]}"
                 )
@@ -69,15 +64,34 @@ class ExtractChapter(yt_dlp.postprocessor.PostProcessor):
         return [], information
 
 
-class EmbedMetadata(yt_dlp.postprocessor.PostProcessor):
-    def __init__(self, downloader=None, info_dict: dict = None) -> None:
+class ChangeInfoDict(yt_dlp.postprocessor.PostProcessor):
+    def __init__(self, downloader=None, info_dict: VideoInfoDict = None) -> None:
         super().__init__(downloader=downloader)
-        self.info_dict = info_dict
+        self.info_dict = info_dict if info_dict else {}
+
+    @staticmethod
+    def simplify_long_types(long_types: list | tuple | dict | set) -> str:
+        if isinstance(long_types, dict):
+            long_types = list(long_types.keys())
+
+        return ", ".join(long_types)[:40]
 
     def run(self, information):
         for key, value in self.info_dict:
             if value:
+                value_to_change = self.simplify_long_types(value)
+
+                if key in information:  # 기존값 변경시
+                    existing_value = self.simplify_long_types(information[key])
+
+                    self.to_screen(
+                        f"Changed {key}: {existing_value} >> {value_to_change}"
+                    )
+                else:  # 신규 생성시
+                    self.to_screen(f"Added {key}: {value_to_change}")
+
                 information[key] = value
+
         return [], information
 
 
@@ -101,8 +115,8 @@ def download_video(
     logger=None,
     quiet: bool = True,
     progress_delta: float = 0,
-    embedmetadata: EmbedMetadata = None,
-):
+    change_info_dict: VideoInfoDict = None,
+) -> int:
     """
     skip_hls_or_dash: None(https), 'hls'(hls 스킵), 'dash'(dash 스킵)
     로거는 객체로 전달해야 함
@@ -122,35 +136,46 @@ def download_video(
         urls = [urls]
     if inner_folder:
         inner_folder += "\\"
-    ydl_opts = {
+
+    ydl_opts: dict[str, Any] = {
         "concurrent_fragment_downloads": concurrent_fragments,
         "extractor_args": {"youtube": {"skip": ["translated_subs"]}},
         "format": f"bestvideo{restrict_format}+bestaudio/best{restrict_format}",
         "merge_output_format": ext,
         "noprogress": False,
         "outtmpl": {
-            "default": f"{inner_folder}%(title)s (%(uploader)s) [%(upload_date>%y.%m.%d)s].%(ext)s",
-            "chapter": f"{inner_folder}%(title)s - %(section_title)s (%(uploader)s) "
+            "default":
+            f"{inner_folder}%(title)s (%(uploader)s) [%(upload_date>%y.%m.%d)s].%(ext)s",
+            "chapter":
+            f"{inner_folder}%(title)s - %(section_title)s (%(uploader)s) "
             f"[%(upload_date>%y.%m.%d)s].%(ext)s",
         },
         "paths": {
             "home": video_path,
             "chapter": video_path,
             "temp": f"{video_path}\\temp" if not temp_path else temp_path,
-            "thumbnail": (
-                thumbnail_path if thumbnail_path else f"{video_path}\\thumbnails"
-            ),
+            "thumbnail": (thumbnail_path if thumbnail_path else f"{video_path}\\thumbnails"),
         },
         "postprocessors": [
-            {"format": "jpg", "key": "FFmpegThumbnailsConvertor", "when": "before_dl"},
-            {"already_have_subtitle": False, "key": "FFmpegEmbedSubtitle"},
-            {"already_have_thumbnail": True, "key": "EmbedThumbnail"},
+            {
+                "format": "jpg",
+                "key": "FFmpegThumbnailsConvertor",
+                "when": "before_dl"
+            },
+            {
+                "already_have_subtitle": False,
+                "key": "FFmpegEmbedSubtitle"
+            },
+            {
+                "already_have_thumbnail": True,
+                "key": "EmbedThumbnail"
+            },
             {
                 "add_chapters": True,
                 "add_infojson": embed_info_json,
                 "add_metadata": True,
                 "key": "FFmpegMetadata",
-            },
+            }
         ],
         "subtitleslangs": ["kr", "jp", "en"],
         "writesubtitles": True,
@@ -161,24 +186,24 @@ def download_video(
         "progress_delta": progress_delta,
     }
     if split_chapters:
-        ydl_opts["postprocessors"].append(
-            {"force_keyframes": False, "key": "FFmpegSplitChapters"}
-        )
+        ydl_opts["postprocessors"].append({
+            "force_keyframes": False,
+            "key": "FFmpegSplitChapters"
+        })
     if progress_hook:
         ydl_opts["progress_hooks"] = [progress_hook]
     if download_archive_name:  # 이름 빈칸으로 하면 x
         ydl_opts["download_archive"] = (
             f"{download_archive_path}\\{download_archive_name}"
-            if download_archive_path
-            else download_archive_name
-        )
+            if download_archive_path else download_archive_name)
     if skip_hls_or_dash:
         ydl_opts["extractor_args"]["youtube"]["skip"] += skip_hls_or_dash
     if logger:
         ydl_opts["logger"] = logger
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.add_post_processor(embedmetadata, when="before_dl")
+        ydl.add_post_processor(ChangeInfoDict(info_dict=change_info_dict),
+                               when="before_dl")
         error_code = ydl.download(urls)
 
     return error_code
@@ -205,8 +230,8 @@ def download_music(
     logger=None,
     quiet: bool = True,
     progress_delta: float = 0,
-    embedmetadata: EmbedMetadata = None,
-):
+    change_info_dict: VideoInfoDict = None,
+) -> int:
     """
     skip_hls_or_dash: None(https), 'hls'(hls 스킵), 'dash'(dash 스킵)
     로거는 객체로 전달해야 함
@@ -233,7 +258,8 @@ def download_music(
         urls = [urls]
     if inner_folder:
         inner_folder += "\\"
-    ydl_opts = {
+
+    ydl_opts: dict[str, Any] = {
         "concurrent_fragment_downloads": concurrent_fragments,
         "extractor_args": {"youtube": {"skip": ["translated_subs"]}},
         "final_ext": "mka",
@@ -247,19 +273,24 @@ def download_music(
             "home": music_path,
             "chapter": music_path,
             "temp": f"{music_path}\\temp" if not temp_path else temp_path,
-            "thumbnail": (
-                thumbnail_path if thumbnail_path else f"{music_path}\\thumbnails"
-            ),
+            "thumbnail": thumbnail_path if thumbnail_path else f"{music_path}\\thumbnails",
         },
         "postprocessors": [
-            {"format": "jpg", "key": "FFmpegThumbnailsConvertor", "when": "before_dl"},
+            {
+                "format": "jpg",
+                "key": "FFmpegThumbnailsConvertor",
+                "when": "before_dl"
+            },
             {
                 "key": "FFmpegExtractAudio",
                 "nopostoverwrites": False,
                 "preferredcodec": "best",
                 "preferredquality": "0",
             },
-            {"key": "FFmpegVideoRemuxer", "preferedformat": "mka"},
+            {
+                "key": "FFmpegVideoRemuxer",
+                "preferedformat": "mka"
+            },
             {
                 "add_chapters": True,
                 "add_infojson": embed_info_json,
@@ -277,7 +308,7 @@ def download_music(
             # {'already_have_subtitle': False,
             #  'key': 'FFmpegEmbedSubtitle'}
         ],
-        "subtitleslangs": ["kr", "jp", "en"],
+        # "subtitleslangs": ["kr", "jp", "en"],
         # 'writesubtitles': True,
         "quiet": quiet,
         "writethumbnail": True,
@@ -287,36 +318,35 @@ def download_music(
     }
 
     if split_chapters:
-        ydl_opts["postprocessors"].append(
-            {"force_keyframes": False, "key": "FFmpegSplitChapters"}
-        )
+        ydl_opts["postprocessors"].append({
+            "force_keyframes": False,
+            "key": "FFmpegSplitChapters"
+        })
     else:  # 챕터 나누지 않으면
-        ydl_opts["postprocessors"].append(
-            {"already_have_thumbnail": True, "key": "EmbedThumbnail"}
-        )
+        ydl_opts["postprocessors"].append({
+            "already_have_thumbnail": True,
+            "key": "EmbedThumbnail"
+        })  # 이거 양립 안되나
     if progress_hook:
         ydl_opts["progress_hooks"] = [progress_hook]
     if download_archive_name:  # 이름 빈칸으로 하면 x
         ydl_opts["download_archive"] = (
             f"{download_archive_path}\\{download_archive_name}"
-            if download_archive_path
-            else download_archive_name
-        )
+            if download_archive_path else download_archive_name)
     if skip_hls_or_dash:
         ydl_opts["extractor_args"]["youtube"]["skip"] += skip_hls_or_dash
     if logger:
         ydl_opts["logger"] = logger
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.add_post_processor(
-            embedmetadata, when="before_dl"
-        )  # 메타데이터 임베딩 하기 전이어야 함
+        ydl.add_post_processor(ChangeInfoDict(info_dict=change_info_dict),
+                               when="before_dl")  # 메타데이터 임베딩 하기 전이어야 함
         error_code = ydl.download(urls)
 
     return error_code
 
 
-def bring_playlist_info(url: str, logger=None) -> dict:
+def bring_playlist_info(url: str, logger=None) -> PlaylistInfoDict | ChannelInfoDict:
     """플리의 title수정
     로거는 객체로 전달해야 함
 
@@ -330,23 +360,28 @@ def bring_playlist_info(url: str, logger=None) -> dict:
         "noprogress": True,
         "quiet": True,
         "skip_download": True,
-        "extractor_args": {"youtube": {"skip": ["translated_subs"]}},
+        "extractor_args": {
+            "youtube": {
+                "skip": ["translated_subs"],
+                
+                }},
     }
     if logger:
         ydl_opts["logger"] = logger
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict: dict = ydl.extract_info(url, download=False)
-        info_dict["old_title"] = info_dict.get("title")
-        info_dict["title"] = format_filename(info_dict.get("title"))
+        info_dict: PlaylistInfoDict | ChannelInfoDict = ydl.extract_info(
+            url, download=False)
+        info_dict["old_title"] = info_dict.get("title", "")
+        info_dict["title"] = format_filename(info_dict.get("title", ""))
         info_dict = ydl.sanitize_info(info_dict)
 
     return info_dict
 
 
-def bring_video_info(
-    url: str, playlist_name: str = "", logger=None
-) -> tuple[dict, str]:
+def bring_video_info(url: str,
+                     playlist_name: str = "",
+                     logger=None) -> tuple[VideoInfoDict, str | None]:
     """
     전체 수, 댓글 전체수는 제한 없고 각 댓글마다 5개씩 20개 가져옴
     webpage_url이 아니라 url임.
@@ -375,22 +410,15 @@ def bring_video_info(
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             ydl.add_post_processor(ExtractChapter(), when="after_filter")
-            info_dict: dict = ydl.extract_info(url, download=False)
-            info_dict["old_title"] = info_dict.get("title")
+            info_dict: VideoInfoDict = ydl.extract_info(url, download=False)
+            info_dict["old_title"] = info_dict.get("title", "")
             info_dict["title"] = format_filename(info_dict.get("title"))
             if playlist_name:  # 비디오에서는 플리명을 모르기 때문에
                 info_dict["playlist"] = playlist_name
 
-            for key in [
-                "formats",
-                "requested_formats",
-                "automatic_captions",
-                "heatmap",
-                "thumbnails",
-                "heatmap",
-            ]:
-                if key in info_dict.keys():
-                    del info_dict[key]
+            # for key in ["formats", "requested_formats", "automatic_captions", "heatmap", "thumbnails", "heatmap",]:
+                # if key in info_dict.keys():
+                # del info_dict[key]
 
             info_dict = ydl.sanitize_info(info_dict)
             tb = None
@@ -401,23 +429,49 @@ def bring_video_info(
     return info_dict, tb
 
 
-def change_video_dict_list(channel_info_dict: dict) -> list[dict]:
-    """채널 받아서 이름 포메팅 된 entries 내의 동영상 딕셔너리 리스트 반환"""
-    entries: list[dict] = channel_info_dict.get("entries")
-    video_list: list[dict] = []  # 비디오 딕셔너리 목록 담을 리스트
+# def change_video_dict_list(playlist_info_dict: dict) -> list[dict]:  # 구버전 함수
+    # """채널 받아서 이름 포메팅 된 entries 내의 동영상 딕셔너리 리스트 반환"""
+    # entries = playlist_info_dict.get("entries")
+    # video_list: list[dict] = []  # 비디오 딕셔너리 목록 담을 리스트
     # 만약 엔트리에 플리가 있으면 그거 붙이고 비디오면 append
-    for entry in entries:
-        if entry.get("_type") == "playlist":
-            video_list += entry.get("entries")  # +=과 같은거임
-        elif entry.get("_type") == "url":  # 비디오면
-            video_list.append(entry)
+    # for entry in entries:
+    # if entry.get("_type") == "playlist":
+    # video_list += entry.get("entries")  # +=과 같은거임
+    # elif entry.get("_type") == "url":  # 비디오면
+    # video_list.append(entry)
     # 비디오 타이틀 변경. 이건 플리에서 바꾸는건데 플리에선 각 비디오 이름은 안바뀌므로
-    for video in enumerate(video_list):
-        video["old_title"] = video.get("title")
-        video["title"] = format_filename(video.get("title"))
-        video["webpage_url"] = video.get("url")
+    # for video in enumerate(video_list):
+    # video["old_title"] = video.get("title")
+    # video["title"] = format_filename(video.get("title"))
+    # video["webpage_url"] = video.get("url")
+#
+    # return video_list
 
+
+def extract_playlist_entries(data_playlist: PlaylistInfoDict, title_playlist: PlaylistInfoDict) -> list[EntryInPlaylist]:
+    """두개의 플리를 제공받아 이름을 변경하고 플레이리스트 필드를 체움. 채널의 경우는 이 함수를 여러번 적용"""
+    entries = data_playlist["entries"]
+    video_list: list[EntryInPlaylist] = []
+
+    for entry in entries:
+        video_list.append(entry)
+
+    for video in video_list:
+        # 구버전 이름부터 한글 이름으로. 플리를 두번 가져와서 이름만 수정한 플리로 제공
+        video["old_title"] = video.get("title", "")
+        video["title"] = format_filename(video.get("title", ""))
+        # video['playlist'] = playlist_info_dict["title"]
     return video_list
+
+
+def check_channel_or_playlist(playlist_info_dict: PlaylistInfoDict | ChannelInfoDict) -> str:
+    # 채널인지 확인, 채널 탭에 따로 저장 또는 앞에 구분 문자열 [channel] 붙임, 위에 change함수는 채널에서 플리 내 요소로 여러번 돌려서 결합. 플리 추출시에도 url분석이 아니라 이거로로
+    entries = playlist_info_dict['entries']
+    entry_type = entries[0]['_type']
+    if entry_type == "playlist":
+        return "channel"
+    else:
+        return "platlist"
 
 
 # 구버전
