@@ -3,7 +3,7 @@ from .modulemanage.module_update import check_and_update_module
 # ------------------------------
 from .main.videosmanager import VideosManager
 from .main.videos import Videos
-from .main.rich_VD4 import my_console as con
+from .main.rich_vd4 import my_console as con
 from .main import formatstr
 
 from .richtext import ask_prompt as ask

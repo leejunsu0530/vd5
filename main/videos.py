@@ -13,9 +13,9 @@ from ..newtypes.dict_list import (
     dict_set_diff,
     dict_set_union,
 )
-
+from ..newtypes.dict_formatting import dict_formatting
+from ..newtypes.new_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, VideoInfoDict, EntryInPlaylist
 from .rich_vd4 import make_info_table, Table, my_console, path_styler
-from ..newtypes.new_types import InfoDict, MAJOR_KEYS
 
 CODE_FILE_PATH = bring_file_name_no_ext()
 
@@ -50,7 +50,8 @@ class Videos:
         video_bring_restrict: Callable[[InfoDict], bool] = None,
         playlist_title: str = "",
         inner_folder_split: (
-            Literal["%(upload_date>%Y.%m)s", "%(uploader)s", "%(playlist)s"] | str
+            Literal["%(upload_date>%Y.%m)s",
+                    "%(uploader)s", "%(playlist)s"] | str
         ) = "",
         styles: list[Style | str] | Style | str | None = None,
         split_chapter: bool = False,
@@ -137,7 +138,8 @@ class Videos:
         self,
         playlist_title: str = "",
         inner_folder_split: (
-            Literal["%(upload_date>%Y.%m)s", "%(uploader)s", "%(playlist)s"] | str
+            Literal["%(upload_date>%Y.%m)s",
+                    "%(uploader)s", "%(playlist)s"] | str
         ) = "",
         styles: list[Style | str] | Style | str | None = None,
         split_chapter: bool = False,
@@ -241,7 +243,8 @@ class Videos:
         self.update()
         table = make_info_table(
             video_list=self.list_all_videos[:len_],
-            keys_to_show=["title", ("upload_date", format_date), "duration_string"],
+            keys_to_show=[
+                "title", ("upload_date", format_date), "duration_string"],
             title=self.pl_folder_name,
             caption=None,
             style=self.style,
@@ -405,7 +408,8 @@ class Videos:
     def show_table(
         self,
         keys_to_show: list[
-            MAJOR_KEYS | tuple[MAJOR_KEYS, Callable[[str | int | float | Any], str]]
+            MAJOR_KEYS | tuple[MAJOR_KEYS,
+                               Callable[[str | int | float | Any], str]]
         ] = None,
         show_lines: bool = False,
         show_edges: bool = True,

@@ -19,7 +19,8 @@ from ..filemanage.filesave import (
 from ..ydl.ydl_tools import (
     bring_playlist_info,
     bring_video_info,
-    change_video_dict_list,
+    extract_playlist_entries,
+    check_channel_or_playlist,
     download_music,
     download_video,
 )
@@ -40,7 +41,7 @@ from .rich_vd4 import (
     group_text_and_progress,
 )
 from .videos import Videos
-from ..newtypes.new_types import MAJOR_KEYS, InfoDict
+from ..newtypes.new_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, EntryInPlaylist, VideoInfoDict
 
 install(show_locals=True)
 
@@ -51,7 +52,8 @@ class VideosManager:
         *playlist_videos_init: Videos | str,
         parent_videos_dir: str = f"{os.getcwd()}\\downloads",
         parent_file_dir: str = "",
-        additional_videos_dict_keys: dict[str, Callable[[InfoDict], Any]] = None,
+        additional_videos_dict_keys: dict[str,
+                                          Callable[[VideoInfoDict], Any]] = None,
         video_force_update: bool | Literal["just_bring"] = False,
         default_styles: list[str | Style] = None,
     ):
@@ -103,7 +105,8 @@ class VideosManager:
                 cannot_download: list[dict] = []
                 # "private", "premium_only", "subscriber_only", "needs_auth", "unlisted" or "public"
                 entries = [
-                    entry for entry in entries if videos.video_bring_restrict(entry) #type:ignore
+                    # type:ignore
+                    entry for entry in entries if videos.video_bring_restrict(entry)
                 ]  # 조건에 맞지 않으면 리스트에서 제거
                 cannot_download = [
                     entry
@@ -162,7 +165,8 @@ class VideosManager:
             )
             videos.thumbnail_path = f"{self._thumbnail_path}\\videos\\{videos.pl_folder_name} ({channel_name})"
             # 채널이 아니라 영상 썸내일 경로임
-            videos.down_archive_path = f"{self._down_archive_path}\\{channel_name}"  # da이름은 비디오스에서 지정
+            # da이름은 비디오스에서 지정
+            videos.down_archive_path = f"{self._down_archive_path}\\{channel_name}"
             videos.custom_da_path = f"{self._down_archive_path}\\Custom_down_archives"
 
             if not videos.styles:  # 비디오스에 유저가 정한 스타일이 없다면
@@ -221,7 +225,8 @@ class VideosManager:
 
             playlist_data_name = f"{info_dict.get('title')} ({info_dict.get('uploader')}) [{info_dict.get('id')}]"
             # 업로더가 여럿일 때 어떻게 되는지 확인, 플리에서 업로더 확인
-            write_dict_to_json(playlist_data_name, info_dict, playlist_data_path)
+            write_dict_to_json(playlist_data_name,
+                               info_dict, playlist_data_path)
 
         return info_dict
 
@@ -269,7 +274,8 @@ class VideosManager:
             not info_dict or force_update
         ):  # force_update가 true거나 문자열이거나 infod가 없으면
             info_dict, dl_traceback = bring_video_info(
-                entry.get("url"), playlist_title, LoggerForRich(console=console)
+                entry.get("url"), playlist_title, LoggerForRich(
+                    console=console)
             )
             if (
                 not dl_traceback and force_update != "just_bring"
@@ -350,7 +356,8 @@ class VideosManager:
 
     def show_total_table(
         self,
-        keys_to_show: list[MAJOR_KEYS | tuple[MAJOR_KEYS, Callable[[Any], str]]] = None,
+        keys_to_show: list[MAJOR_KEYS |
+                           tuple[MAJOR_KEYS, Callable[[Any], str]]] = None,
         show_lines: bool = False,
         show_edges: bool = True,
         restrict: Callable[[InfoDict], bool] = None,
@@ -389,7 +396,8 @@ class VideosManager:
                 f"[{videos.style}]다운로드 가능 영상 수: {can_dl_len}, "
                 f"다운로드 불가능 영상 수: {cannot_dl_len}, 총 용량: {format_byte_str(can_dl_filesize_sum)}[/]\n"
             )
-            row_style += (videos.styles[:3] * ((can_dl_len // 3) + 1))[:can_dl_len]
+            row_style += (videos.styles[:3] *
+                          ((can_dl_len // 3) + 1))[:can_dl_len]
 
         caption_to_show += (
             f"전체 다운로드 가능 영상 수: {sum_candl}, 다운로드 불가능 영상 수: {sum_cantdl}, "
@@ -434,7 +442,8 @@ class VideosManager:
             msg = msg.replace("\n", "")
             msg_text = self.highlight_text(msg)
             self.live.update(
-                group_text_and_progress(msg_text, self.videos.style, self.progress)
+                group_text_and_progress(
+                    msg_text, self.videos.style, self.progress)
             )
 
         def error(self, msg):
@@ -492,11 +501,13 @@ class VideosManager:
                 )
 
                 def my_hook(d: dict):
-                    info_dict: dict = d["info_dict"] if "info_dict" in d else {}
+                    info_dict: dict = d["info_dict"] if "info_dict" in d else {
+                    }
                     if d["status"] == "downloading":  # 다운중 상태 시 id로 이름 표시
                         # video_title = total_dict.get(info_dict.get('id', ''), "Unknown")
                         video_title = info_dict.get("title", "Unknown")
-                        total_progress.update(total_task, video_title=video_title)
+                        total_progress.update(
+                            total_task, video_title=video_title)
                     elif d["status"] == "finished":
                         id_ = info_dict.get("id")
                         if id_:
@@ -516,7 +527,8 @@ class VideosManager:
                     )
                     for protocol in videos.bring_list_from_key("protocol")
                 ]
-                chapters_list: list[list[dict]] = videos.bring_list_from_key("chapters")
+                chapters_list: list[list[dict]
+                                    ] = videos.bring_list_from_key("chapters")
 
                 if type_ == "video":
                     error_codes = [
@@ -592,5 +604,6 @@ class VideosManager:
         concurrent_fragments: int = min(32, (os.cpu_count() or 1) + 4),
         embed_info_json: bool = False,
     ):
-        error_codes = self.__download("music", concurrent_fragments, embed_info_json)
+        error_codes = self.__download(
+            "music", concurrent_fragments, embed_info_json)
         return error_codes

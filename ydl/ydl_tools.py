@@ -67,7 +67,7 @@ class ExtractChapter(yt_dlp.postprocessor.PostProcessor):
 class ChangeInfoDict(yt_dlp.postprocessor.PostProcessor):
     def __init__(self, downloader=None, info_dict: VideoInfoDict = None) -> None:
         super().__init__(downloader=downloader)
-        self.info_dict = info_dict if info_dict else {}
+        self.info_dict: VideoInfoDict = info_dict if info_dict else {}
 
     @staticmethod
     def simplify_long_types(long_types: list | tuple | dict | set) -> str:
@@ -77,7 +77,7 @@ class ChangeInfoDict(yt_dlp.postprocessor.PostProcessor):
         return ", ".join(long_types)[:40]
 
     def run(self, information):
-        for key, value in self.info_dict:
+        for key, value in self.info_dict.items():
             if value:
                 value_to_change = self.simplify_long_types(value)
 
@@ -346,7 +346,7 @@ def download_music(
     return error_code
 
 
-def bring_playlist_info(url: str, logger=None) -> PlaylistInfoDict | ChannelInfoDict:
+def bring_playlist_info(url: str, logger=None, change_lang: bool = False) -> PlaylistInfoDict | ChannelInfoDict:
     """플리의 title수정
     로거는 객체로 전달해야 함
 
@@ -355,7 +355,7 @@ def bring_playlist_info(url: str, logger=None) -> PlaylistInfoDict | ChannelInfo
     yt-dlp --flat-playlist --quiet --skip-download
     --extractor-args "youtube:lang=ko;skip=translated_subs"
     """
-    ydl_opts = {
+    ydl_opts: dict[str, Any] = {
         "extract_flat": "in_playlist",
         "noprogress": True,
         "quiet": True,
@@ -363,11 +363,14 @@ def bring_playlist_info(url: str, logger=None) -> PlaylistInfoDict | ChannelInfo
         "extractor_args": {
             "youtube": {
                 "skip": ["translated_subs"],
-                
-                }},
+                # 이게 될지 모름. 되는지 보고 실 사용시에는 분리해서 두번 긁어오기.
+
+            }},
     }
     if logger:
         ydl_opts["logger"] = logger
+    if change_lang:
+        ydl_opts["extractor_args"]["youtube"]["lang"] = ['ko']
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict: PlaylistInfoDict | ChannelInfoDict = ydl.extract_info(
@@ -448,20 +451,16 @@ def bring_video_info(url: str,
     # return video_list
 
 
-def extract_playlist_entries(data_playlist: PlaylistInfoDict, title_playlist: PlaylistInfoDict) -> list[EntryInPlaylist]:
+def extract_playlist_entries(data_playlist: PlaylistInfoDict) -> list[EntryInPlaylist]:
     """두개의 플리를 제공받아 이름을 변경하고 플레이리스트 필드를 체움. 채널의 경우는 이 함수를 여러번 적용"""
     entries = data_playlist["entries"]
-    video_list: list[EntryInPlaylist] = []
 
     for entry in entries:
-        video_list.append(entry)
-
-    for video in video_list:
         # 구버전 이름부터 한글 이름으로. 플리를 두번 가져와서 이름만 수정한 플리로 제공
-        video["old_title"] = video.get("title", "")
-        video["title"] = format_filename(video.get("title", ""))
-        # video['playlist'] = playlist_info_dict["title"]
-    return video_list
+        entry["old_title"] = entry['title']
+        entry["title"] = format_filename(entry["title"])
+        entry['playlist'] = data_playlist["title"]
+    return entries
 
 
 def check_channel_or_playlist(playlist_info_dict: PlaylistInfoDict | ChannelInfoDict) -> str:
