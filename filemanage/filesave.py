@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+from ..newtypes.new_types import ChannelInfoDict, PlaylistInfoDict
 
 
 def write_str_to_file(file_name: str, to_write: str = "", parent_path: str = os.getcwd()):
@@ -21,7 +22,7 @@ def read_str_from_file(file_path: str) -> str | None:
         return text
 
 
-def write_dict_to_json(file_name: str, info_dict: dict, parent_path: str = os.getcwd()):
+def write_dict_to_json(file_name: str, info_dict: dict | ChannelInfoDict | PlaylistInfoDict, parent_path: str = os.getcwd()):
     """업데이트 여부는 호출할 함수에서 판별
     파일 이름에는 json 붙이든 말든 상관없음"""
     if not os.path.exists(parent_path):

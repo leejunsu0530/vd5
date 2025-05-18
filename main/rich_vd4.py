@@ -1,4 +1,4 @@
-from typing import Callable, Any
+from typing import Callable, Any, Literal
 
 from rich.console import Console, Group
 from rich.table import Table, Column
@@ -56,14 +56,16 @@ def progress_video_info(console: Console | None = None) -> Progress:
 
 
 def progress_playlist_data(console: Console | None = None) -> Progress:
+    """사라지게 하는 설정 필요, 메시지 수정은 부르는 쪽에서서"""
     return Progress(
         TextColumn(
             "[bright_white]{task.description}[/]",
             justify="left"
         ),
-        MofNCompleteColumn(),
+        "(",
         TimeElapsedColumn(),
-        SpinnerColumn(),
+        ")",
+        SpinnerColumn("simpleDots"),
         console=console,
     )
 
@@ -123,10 +125,13 @@ def hightlight_download_text(msg: str):
 
 
 class LoggerForRich:
-    def __init__(self, print_info: bool | str = False, console=my_console):
+    def __init__(self, print_info: bool | Literal['only_download'] = False,
+                 skip_lang_warning: bool = True,
+                 console=None):
         """print_info: 'only_download', false, true. 특정 시간보다 클때 출력 여부는 외부에서 결정"""
         self.print_info = print_info
-        self.console = console
+        self.skip_lang_warning = skip_lang_warning
+        self.console = console if console else my_console
 
     def debug(self, msg):
         # For compatibility with youtube-dl, both debug and info are passed into debug
@@ -145,7 +150,7 @@ class LoggerForRich:
 
         return msg_text
 
-    def info(self, msg):
+    def info(self, msg: str):
         if self.print_info is False:
             return None
         elif self.print_info == "only_download" and not msg.startswith("[download]"):
@@ -154,9 +159,11 @@ class LoggerForRich:
         msg_text = self.highlight_text(msg)
         self.console.print(msg_text)
 
-    def warning(self, msg):
-        msg = Text.from_ansi(msg)
-        self.console.print(msg, style="bright_yellow")
+    def warning(self, msg: str):
+        if msg.startswith('[youtube:tab] Preferring "ko" translated fields. Note that some metadata extraction may fail or be incorrect.'):
+            return None
+        msg_text = Text.from_ansi(msg)
+        self.console.print(msg_text, style="bright_yellow")
 
     def error(self, msg):
         msg = Text.from_ansi(msg)

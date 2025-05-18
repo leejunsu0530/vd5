@@ -20,7 +20,7 @@ from ..ydl.ydl_tools import (
     bring_playlist_info,
     bring_video_info,
     extract_playlist_entries,
-    check_channel_or_playlist,
+    # check_channel_or_playlist,
     download_music,
     download_video,
 )
@@ -36,12 +36,13 @@ from .rich_vd4 import (
     my_console,
     LoggerForRich,
     progress_video_info,
+    progress_playlist_data,
     default_keys_to_show,
     make_info_table,
     group_text_and_progress,
 )
 from .videos import Videos
-from ..newtypes.new_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, EntryInPlaylist, VideoInfoDict
+from ..newtypes.new_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, EntryInPlaylist, VideoInfoDict, is_channel_info_dict, is_playlist_info_dict
 
 install(show_locals=True)
 
@@ -71,18 +72,20 @@ class VideosManager:
         if not parent_file_dir:
             parent_file_dir = parent_videos_dir
         self.data_path = f"{parent_file_dir}\\Data"  # 이건 그대로
+
+        self._playlist_data_path = f"{self.data_path}\\playlist_data"
+        self._channel_data_path = f"{self.data_path}\\channel_data"
         self._thumbnail_path = f"{parent_file_dir}\\Thumbnails"
         self._video_path = f"{parent_videos_dir}\\Videos"
         self.error_path = f"{parent_file_dir}\\Errors"
         self._down_archive_path = f"{parent_file_dir}\\Download_archives"
         self.temp_path = f"{parent_videos_dir}\\Temp"
-
-        self.videos_list: list[Videos] = []
-        self.videos_to_download_list: list[Videos] = []
-
         self._channel_thumbnail_path = f"{self._thumbnail_path}\\Channel_thumbnails"
         self.channel_style_dict_path = self.data_path
         self.channel_style_dict_name = "channel_style.json"
+
+        self.videos_list: list[Videos] = []
+        self.videos_to_download_list: list[Videos] = []
 
         self.channel_style_dict: dict[str, list[str]] = read_dict_from_json(
             self.channel_style_dict_path, self.channel_style_dict_name
@@ -90,62 +93,54 @@ class VideosManager:
 
         for videos in playlist_videos_init:
             if isinstance(videos, str):
-                videos = Videos(playlist_url=videos)
+                videos = Videos(videos)
+
             # 채널 정보 가져와서 영상 목록 뽑아내기
             playlist_url = videos.playlist_url
             playlist_info_dict = self.__bring_playlist_json(
-                playlist_url, videos.update_playlist_data
-            )
+                playlist_url, self._playlist_data_path, self._channel_data_path)
             channel_name = playlist_info_dict.get(
-                "channel"
-            )  # 채널로 할지 업로더로 할지?
+                "channel", "Unknown")  # 채널로 할지 업로더로 할지?
 
             if not videos.list_all_videos:  # 기존 비디오스를 재사용하는 게 아니면
-                entries = change_video_dict_list(playlist_info_dict)
-                cannot_download: list[dict] = []
+                entries: list[EntryInPlaylist] = []
+
+                if is_playlist_info_dict(playlist_info_dict):
+                    entries = extract_playlist_entries(playlist_info_dict)
+
+                elif is_channel_info_dict(playlist_info_dict):
+                    for playlist in playlist_info_dict["entries"]:
+                        entries += extract_playlist_entries(playlist)
+
                 # "private", "premium_only", "subscriber_only", "needs_auth", "unlisted" or "public"
+                # 조건에 맞지 않으면 리스트에서 제거
                 entries = [
-                    # type:ignore
-                    entry for entry in entries if videos.video_bring_restrict(entry)
-                ]  # 조건에 맞지 않으면 리스트에서 제거
-                cannot_download = [
-                    entry
-                    for entry in entries
-                    if entry.get("availability")
-                    in ("premium_only", "subscriber_only", "needs_auth", "unlisted")
-                ]  # 이 중 하나면 cannot d에 넣기
+                    entry for entry in entries if videos.video_bring_restrict(entry)]
+                cannot_download = [entry for entry in entries if entry.get("availability")
+                                   in ("premium_only", "subscriber_only", "needs_auth", "unlisted")]  # 이 중 하나면 cannot d에 넣기
+
                 entries = [
-                    entry
-                    for entry in entries
-                    if not entry.get("availability")
-                    in (
-                        "premium_only",
-                        "subscriber_only",
-                        "needs_auth",
-                        "unlisted",
-                        "private",
-                    )
-                    or "[Private video]" not in entry.get("title")
+                    entry for entry in entries
+                    if not entry.get("availability") in ("premium_only", "subscriber_only", "needs_auth", "unlisted", "private")
+                    or "[Private video]" not in entry.get('title', "Unknown")
                 ]  # 이 조건이 아니면 처리
 
                 # 구체화 정보 가져와서 비디오스로 넣기
                 videos.list_all_videos = (
                     self.__bring_detailed_info_list(
                         playlist_url,
-                        playlist_info_dict.get("title"),
+                        playlist_info_dict.get("title", "Unknown"),
                         channel_name,
                         entries,
-                        video_force_update,
-                    )
+                        video_force_update)
                     + cannot_download
                 )
             else:
                 my_console.print(f"{videos.pl_folder_name} Videos 가져옴")
 
-            if (
-                not videos.pl_folder_name
-            ):  # 플리 이름 설정 따로 한게 아니면. 이건 일단 남겨놈
-                videos.pl_folder_name = playlist_info_dict.get("title")
+            if not videos.pl_folder_name:  # 플리 이름 설정 따로 한게 아니면. 이건 일단 남겨놈
+                videos.pl_folder_name = playlist_info_dict.get(
+                    "title", "Unknown")
                 videos.down_archive_name = f"{videos.pl_folder_name}.archive"
 
             # 경로설정
@@ -154,15 +149,9 @@ class VideosManager:
                 videos.artist = channel_name
             if not videos.album:
                 videos.album = videos.pl_folder_name
-            videos.video_path = (
-                f"{self._video_path}\\{videos.pl_folder_name} ({channel_name})"
-            )
-            videos.temp_path = (
-                f"{self.temp_path}\\{videos.pl_folder_name} ({channel_name})"
-            )
-            videos.error_path = (
-                f"{self.error_path}\\{videos.pl_folder_name} ({channel_name})"
-            )
+            videos.video_path = f"{self._video_path}\\{videos.pl_folder_name} ({channel_name})"
+            videos.temp_path = f"{self.temp_path}\\{videos.pl_folder_name} ({channel_name})"
+            videos.error_path = f"{self.error_path}\\{videos.pl_folder_name} ({channel_name})"
             videos.thumbnail_path = f"{self._thumbnail_path}\\videos\\{videos.pl_folder_name} ({channel_name})"
             # 채널이 아니라 영상 썸내일 경로임
             # da이름은 비디오스에서 지정
@@ -172,22 +161,14 @@ class VideosManager:
             if not videos.styles:  # 비디오스에 유저가 정한 스타일이 없다면
                 if default_styles:  # 유저가 지정한 게 최우선
                     videos.styles = default_styles  # 일괄 스타일임
-                elif (
-                    channel_name in self.channel_style_dict
-                ):  # 이미 이 채널의 스타일을 지정한 적이 있으면
+                elif channel_name in self.channel_style_dict:  # 이미 이 채널의 스타일을 지정한 적이 있으면
                     videos.styles = self.channel_style_dict[channel_name]
                 else:  # 처음 지정하는 채널이면
-                    channel_url = playlist_info_dict.get(
-                        "uploader_url"
-                    )  # 채널이면 업로더 url에 id 있음.
-                    if channel_url is None:
-                        channel_url = playlist_info_dict.get(
-                            "channel_url"
-                        )  # 플리면 업로더 url이 없음. 이걸로
+                    # 기존에 채널이면 업로더 url 쓰고 플리면 채널 url 쓰던건 빠른 로딩때문인데 그거 지웠으니까 둘 다에 있는 걸로로
+                    channel_url = playlist_info_dict['channel_url']
 
                     self.channel_style_dict[channel_name] = self.__get_thumbnail_colors(
-                        channel_url, self._channel_thumbnail_path, my_console
-                    )  # 색 반환
+                        channel_url, self._channel_thumbnail_path, my_console)
                     videos.styles = self.channel_style_dict[channel_name]
 
             if additional_videos_dict_keys:
@@ -205,28 +186,23 @@ class VideosManager:
             self.channel_style_dict_path,
         )
 
-    def __bring_playlist_json(self, url: str, update_data: bool = True) -> dict:
-        """갱신은 지속적으로 업로드되는 채널에서 가져오는 것이 아니면 필요 없음
-        채널은 id찾아보고 없으면 가져오기
-        """
-        id_: str | None = find_id(url)
+    def __bring_playlist_json(self, url: str, playlist_data_path: str, channel_data_path: str, update: bool = False, called_from_thumbnail: bool = False) -> ChannelInfoDict | PlaylistInfoDict:
+        """채널이어도 스킵x. id 찾는게 꼬일 수 있음. 어처피 링크 잘못돼서 플리 꼬이는 것보다는 몇 초 더 걸리는 게 나음. 썸내일은 어처피 최초 한 번만 되니까 무시
+        여기에 링크 띄우는 거랑 스피너만 추가. 언어는 한국어로"""
+        os.makedirs(playlist_data_path, exist_ok=True)
+        os.makedirs(channel_data_path, exist_ok=True)
 
-        playlist_data_path = f"{self.data_path}\\playlist_data"
-        os.makedirs(playlist_data_path, exist_ok=True)  # 경로 없으면 오류남
+        # 프로그래스에서 만들기. 이건 사라지기 지정 안됨.
+        with my_console.status(f"{url} 정보 가져오는 중...", disable=True):
+            info_dict = bring_playlist_info(
+                url, LoggerForRich(skip_lang_warning=True), True)
 
-        for pl_name in os.listdir(playlist_data_path):
-            if id_ and id_ in pl_name:
-                info_dict = read_dict_from_json(playlist_data_path, pl_name)
-                if not update_data:  # 업데이트 할거면(true면) break 안하고
-                    break  # 파일 찾았고 갱신x면 이거 리턴. break되면 else 안됨
+        info_dict_name = f"{info_dict.get('title')} ({info_dict.get('uploader')}) [{info_dict.get('id')}]"
 
-        else:  # for문에서 못찾으면 -> 파일에 없으면/업데이트 하는거면
-            info_dict: dict = bring_playlist_info(url, LoggerForRich())
-
-            playlist_data_name = f"{info_dict.get('title')} ({info_dict.get('uploader')}) [{info_dict.get('id')}]"
-            # 업로더가 여럿일 때 어떻게 되는지 확인, 플리에서 업로더 확인
-            write_dict_to_json(playlist_data_name,
-                               info_dict, playlist_data_path)
+        if is_channel_info_dict(info_dict):
+            write_dict_to_json(info_dict_name, info_dict, channel_data_path)
+        elif is_playlist_info_dict(info_dict):
+            write_dict_to_json(info_dict_name, info_dict, playlist_data_path)
 
         return info_dict
 
@@ -300,9 +276,9 @@ class VideosManager:
         playlist_url: str,
         playlist_title: str,
         channel_name: str,
-        entries: list[dict],
+        entries: list[EntryInPlaylist],
         force_update: bool | str = False,
-    ) -> list[dict]:
+    ) -> list[VideoInfoDict]:
         """업로더 이름에는 플리/채널명이 정보폴더 이름으로 들어감.
         개별 비디오는 채널명 폴더에 저장
         force_update가 just_bring면 파일로 저장x
@@ -312,9 +288,6 @@ class VideosManager:
         info_dict_list: list[dict | None] = []
 
         with ThreadPoolExecutor() as excutor, progress_video_info() as progress:
-            progress.print(
-                f"{playlist_url} 정보 가져오는 중..."
-            )  # 이건 프로그래스 도중이 아니라 잘 적용됨
             task_id = progress.add_task(
                 "비디오 정보 다운로드: ",
                 total=len(entries),

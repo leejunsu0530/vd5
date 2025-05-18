@@ -1,6 +1,6 @@
 import os
 import traceback
-from typing import Callable, Any, LiteralString
+from typing import Callable, Any, Literal
 import yt_dlp  # type:ignore
 
 from ..newtypes.format_str_tools import format_filename
@@ -461,32 +461,3 @@ def extract_playlist_entries(data_playlist: PlaylistInfoDict) -> list[EntryInPla
         entry["title"] = format_filename(entry["title"])
         entry['playlist'] = data_playlist["title"]
     return entries
-
-
-def check_channel_or_playlist(playlist_info_dict: PlaylistInfoDict | ChannelInfoDict) -> str:
-    # 채널인지 확인, 채널 탭에 따로 저장 또는 앞에 구분 문자열 [channel] 붙임, 위에 change함수는 채널에서 플리 내 요소로 여러번 돌려서 결합. 플리 추출시에도 url분석이 아니라 이거로로
-    entries = playlist_info_dict['entries']
-    entry_type = entries[0]['_type']
-    if entry_type == "playlist":
-        return "channel"
-    else:
-        return "platlist"
-
-
-# 구버전
-# def change_video_dict_list(channel_info_dict: dict) -> list[dict]:
-# """채널 받아서 이름 포메팅 된 entries 내의 동영상 딕셔너리 리스트 반환"""
-# entries: list[dict] = channel_info_dict.get("entries")
-# video_list: list[dict] = []  # 비디오 딕셔너리 목록 담을 리스트
-# 만약 엔트리에 플리가 있으면 그거 붙이고 비디오면 append
-# if entries[0].get("_type") == "playlist":
-# [video_list.extend(playlist.get("entries")) for playlist in entries]  # +=과 같은거임
-# elif entries[0].get("_type") == "url":  # 비디오면
-# video_list = entries
-# 비디오 타이틀 변경. 이건 플리에서 바꾸는건데 플리에선 각 비디오 이름은 안바뀌므로
-# for video in video_list:
-# video["old_title"] = video.get("title")
-# video["title"] = format_filename(video.get("title"))
-# video["webpage_url"] = video.get('url')
-#
-# return video_list

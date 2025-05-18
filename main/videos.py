@@ -20,34 +20,11 @@ from .rich_vd4 import make_info_table, Table, my_console, path_styler
 CODE_FILE_PATH = bring_file_name_no_ext()
 
 
-# def sum_videos(
-#     *videos: "Videos",
-#     pl_folder_name: str = "",
-#     artist_name: str = "",
-#     album_title: str = "",
-#     style: Style | str = None,
-# ) -> "Videos":
-#     """커스텀 경로의 비디오스 객체를 반환"""
-#     new_videos: Videos = new_sum(*videos)
-#     if pl_folder_name:
-#         new_videos.pl_folder_name = pl_folder_name
-#     if artist_name:
-#         new_videos.artist = artist_name
-#     if album_title:
-#         new_videos.album = album_title
-#     if style:
-#         new_videos.style = style
-#     new_videos.down_archive_name = None
-#     new_videos.update()
-
-#     return new_videos
-
-
 class Videos:
     def __init__(
         self,
         playlist_url: str,
-        video_bring_restrict: Callable[[InfoDict], bool] = None,
+        video_bring_restrict: Callable[[EntryInPlaylist], bool] = None,
         playlist_title: str = "",
         inner_folder_split: (
             Literal["%(upload_date>%Y.%m)s",
@@ -55,7 +32,7 @@ class Videos:
         ) = "",
         styles: list[Style | str] | Style | str | None = None,
         split_chapter: bool = False,
-        update_playlist_data: bool = True,
+        # update_playlist_data: bool = True,
         custom_da: bool = False,
         artist_name: str = "",
         album_title: str = "",
@@ -69,7 +46,6 @@ class Videos:
             inner_folder_split: 내부에 폴더로 나눔. '%(upload_date>%Y.%m)s' (날짜 월별로 묶기), '%(uploader)s' (업로더 채널명으로 묶기), '%(playlist)s' (플레이리스트 이름으로 묶기). 자세한 건 https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#output-template 의 출력 탬플릿 참조.
             styles: 첫번째 스타일은 표나 정보 등에 사용됨. 스타일 리스트나 스타일, 문자열로 지정가능. 기본적으로는 채널 썸내일에서 주요 색 가져옴. 자세한 건 https://rich.readthedocs.io/en/stable/style.html 참조
             split_chapter: 챕터별로 영상을 분리할지 여부.
-            update_playlist_data: 플리 정보 새로 가져올지 파일에서 읽을지 여부. 지속적인 업로드시 변경해야 갱신됨
             custom_da: 다운로드 아카이브를 커스텀 경로에 저장할지 여부
             artist_name: 작곡가로 들어갈 이름. 기본적으로 채널명으로 자동지정됨.
             album_title: 엘범 제목. 기본적으로 플리명으로 자동지정됨.
@@ -84,16 +60,14 @@ class Videos:
         self.temp_path = ""
         self.custom_da_path = ""
 
-        def check_is_repeated(video_dict: dict) -> bool:
+        def check_is_repeated(video_dict: VideoInfoDict) -> bool:
             # 기존은 list_not_repeated 정의하고 for문 돌면서 넣은 뒤 이 리스트에 있으면 중복에 넣고 이 리스트로 다운 가능/불가능 정했었음.
-            if video_dict.get("id") in bring_key_list(
-                self.list_repeated, "id"
-            ):  # 중복이면
-                return True
+            if video_dict.get("id") in bring_key_list(self.list_repeated, "id"):  # type: ignore
+                return True  # 중복이면
             else:  # 중복 아니면
                 return False
 
-        self.additional_keys: dict[str, Callable[[dict], Any]] = {
+        self.additional_keys: dict[str, Callable[[VideoInfoDict], Any]] = {
             "repeated": check_is_repeated,  # 중복 분류는 구현이 어려움. 중복 확인만 하기
             "is_downloaded": lambda video_dict: (
                 True if video_dict.get("id") in self.bring_da_list() else False
@@ -102,20 +76,21 @@ class Videos:
 
         self.pl_folder_name = playlist_title
         self.playlist_url = playlist_url
-        self.video_bring_restrict = (
-            video_bring_restrict if video_bring_restrict else lambda dict_: True
-        )
-        self.update_playlist_data = update_playlist_data
+        self.video_bring_restrict: Callable[[
+            EntryInPlaylist], bool] = video_bring_restrict if video_bring_restrict else lambda dict_: True
+
+        # self.update_playlist_data = update_playlist_data
         self.inner_split_by = inner_folder_split
         self.split_chapter = split_chapter
         self.custom_da = custom_da
         self.artist = artist_name
         self.album = album_title
 
-        self.list_all_videos: list[dict] = []
-        self.list_can_download: list[dict] = []
-        self.list_cannot_download: list[dict] = []  # 비공개, 맴버십 온리, 최초공개 등.
-        self.list_repeated: list[dict] = []  # 중복 id
+        self.list_all_videos: list[VideoInfoDict | EntryInPlaylist] = []
+        self.list_can_download: list[VideoInfoDict | EntryInPlaylist] = []
+        # 비공개, 맴버십 온리, 최초공개 등.
+        self.list_cannot_download: list[VideoInfoDict | EntryInPlaylist] = []
+        self.list_repeated: list[VideoInfoDict | EntryInPlaylist] = []  # 중복 id
 
         self.sort_by: tuple[str, bool] = (
             "upload_date",

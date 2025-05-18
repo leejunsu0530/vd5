@@ -1,4 +1,4 @@
-from typing import Literal, TypedDict, TypeAlias
+from typing import Literal, TypedDict, TypeAlias, TypeGuard
 
 
 MAJOR_KEYS = Literal[
@@ -144,3 +144,15 @@ class Chapter(TypedDict, total=False):
     title: str
     start_time: int | float
     end_time: int | float
+
+
+def is_channel_info_dict(info_dict: ChannelInfoDict | PlaylistInfoDict) -> TypeGuard[ChannelInfoDict]:
+    entries = info_dict['entries']
+    entry_type = entries[0]['_type']
+    return entry_type == "playlist"  # 채널이면 엔트리 내에 플리 있음
+
+
+def is_playlist_info_dict(info_dict: ChannelInfoDict | PlaylistInfoDict) -> TypeGuard[PlaylistInfoDict]:
+    entries = info_dict['entries']
+    entry_type = entries[0]['_type']
+    return not entry_type == "playlist"  # 플리이면 엔트리 내에 영상 있음
