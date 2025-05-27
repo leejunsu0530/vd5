@@ -1,7 +1,7 @@
 import os
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, Literal, Any
+from typing import Callable, Literal, Any, cast
 
 from rich.style import Style
 from rich.traceback import install
@@ -99,8 +99,7 @@ class VideosManager:
             playlist_url = videos.playlist_url
             playlist_info_dict = self.__bring_playlist_json(
                 playlist_url, self._playlist_data_path, self._channel_data_path)
-            channel_name = playlist_info_dict.get(
-                "channel", "Unknown")  # 채널로 할지 업로더로 할지?
+            channel_name = playlist_info_dict["channel"]  # 채널로 할지 업로더로 할지?
 
             if not videos.list_all_videos:  # 기존 비디오스를 재사용하는 게 아니면
                 entries: list[EntryInPlaylist] = []
@@ -122,14 +121,13 @@ class VideosManager:
                 entries = [
                     entry for entry in entries
                     if not entry.get("availability") in ("premium_only", "subscriber_only", "needs_auth", "unlisted", "private")
-                    or "[Private video]" not in entry.get('title', "Unknown")
+                    or "[Private video]" not in entry['title']
                 ]  # 이 조건이 아니면 처리
 
                 # 구체화 정보 가져와서 비디오스로 넣기
                 videos.list_all_videos = (
                     self.__bring_detailed_info_list(
-                        playlist_url,
-                        playlist_info_dict.get("title", "Unknown"),
+                        playlist_info_dict["title"],
                         channel_name,
                         entries,
                         video_force_update)
@@ -139,8 +137,7 @@ class VideosManager:
                 my_console.print(f"{videos.pl_folder_name} Videos 가져옴")
 
             if not videos.pl_folder_name:  # 플리 이름 설정 따로 한게 아니면. 이건 일단 남겨놈
-                videos.pl_folder_name = playlist_info_dict.get(
-                    "title", "Unknown")
+                videos.pl_folder_name = playlist_info_dict["title"]
                 videos.down_archive_name = f"{videos.pl_folder_name}.archive"
 
             # 경로설정
@@ -186,14 +183,16 @@ class VideosManager:
             self.channel_style_dict_path,
         )
 
-    def __bring_playlist_json(self, url: str, playlist_data_path: str, channel_data_path: str, update: bool = False, called_from_thumbnail: bool = False) -> ChannelInfoDict | PlaylistInfoDict:
+    def __bring_playlist_json(self, url: str, playlist_data_path: str, channel_data_path: str, update: bool = True, called_from_thumbnail: bool = False) -> ChannelInfoDict | PlaylistInfoDict:
         """채널이어도 스킵x. id 찾는게 꼬일 수 있음. 어처피 링크 잘못돼서 플리 꼬이는 것보다는 몇 초 더 걸리는 게 나음. 썸내일은 어처피 최초 한 번만 되니까 무시
         여기에 링크 띄우는 거랑 스피너만 추가. 언어는 한국어로"""
         os.makedirs(playlist_data_path, exist_ok=True)
         os.makedirs(channel_data_path, exist_ok=True)
 
-        # 프로그래스에서 만들기. 이건 사라지기 지정 안됨.
-        with my_console.status(f"{url} 정보 가져오는 중...", disable=True):
+        id_ = find_id(url)
+        
+        with progress_playlist_data(my_console) as progress:
+            task_id = progress.add_task(f"{url} 정보 가져오는 중...")
             info_dict = bring_playlist_info(
                 url, LoggerForRich(skip_lang_warning=True), True)
 
@@ -236,23 +235,21 @@ class VideosManager:
 
     @staticmethod
     def __bring_detailed_info(
-        entry: dict,
+        entry: EntryInPlaylist,
         video_data_path: str,
         error_path: str,
         playlist_title: str,
         force_update: bool | str,
         console: Console = None,
-    ) -> dict:
-        title = entry.get("title")  # 포메팅 된 파일명
+    ) -> VideoInfoDict:
+        title = entry["title"]  # 포메팅 된 파일명
         info_dict: dict = read_dict_from_json(video_data_path, title)
 
         if (
             not info_dict or force_update
         ):  # force_update가 true거나 문자열이거나 infod가 없으면
             info_dict, dl_traceback = bring_video_info(
-                entry.get("url"), playlist_title, LoggerForRich(
-                    console=console)
-            )
+                entry["url"], playlist_title, LoggerForRich(console=console))
             if (
                 not dl_traceback and force_update != "just_bring"
             ):  # 정상이면(justbring면 위에서 가져온거 반환만 하고 저장x)
@@ -273,7 +270,7 @@ class VideosManager:
 
     def __bring_detailed_info_list(
         self,
-        playlist_url: str,
+        # playlist_url: str,
         playlist_title: str,
         channel_name: str,
         entries: list[EntryInPlaylist],

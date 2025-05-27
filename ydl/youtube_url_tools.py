@@ -5,7 +5,7 @@ from urllib.parse import urlparse, parse_qs
 from bs4.element import Tag, NavigableString
 
 
-def extract_channel_handle_or_playlist(url: str) -> str:
+def find_id(url: str) -> str:
     """
     URL에서 채널 핸들 또는 플레이리스트 ID를 추출합니다.
     Args:
@@ -126,7 +126,7 @@ if __name__ == '__main__':
     for url_ in test_urls:
         start_time = time()
         print(f"Input: {url_}")
-        out = f"Output:{extract_channel_handle_or_playlist(url_)}"
+        out = f"Output:{find_id(url_)}"
         if '실패' in out:
             out = f"[red]{out}[/red]"
         print(out)
