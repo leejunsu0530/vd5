@@ -70,7 +70,7 @@ class Videos:
         self.additional_keys: dict[str, Callable[[VideoInfoDict], Any]] = {
             "repeated": check_is_repeated,  # 중복 분류는 구현이 어려움. 중복 확인만 하기
             "is_downloaded": lambda video_dict: (
-                True if video_dict.get("id") in self.bring_da_list() else False
+                True if video_dict.get("id") in self._bring_da_list() else False
             ),
         }
 
@@ -357,7 +357,7 @@ class Videos:
 
         return new_videos_to_return
 
-    def bring_da_list(self) -> list[str]:
+    def _bring_da_list(self) -> list[str]:
         """파일 읽어오기,, 딕셔너리에 is_da넣기,
         비디오스의 da 이름이 custom이면 경로를 커스텀 경로로, 이름을 업로더_파일명.archive로"""
         if (

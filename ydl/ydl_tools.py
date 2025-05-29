@@ -1,7 +1,7 @@
 import os
 import traceback
 from typing import Callable, Any, Literal
-import yt_dlp  # type:ignore
+import yt_dlp  # type: ignore
 
 from ..newtypes.format_str_tools import format_filename
 from ..newtypes.new_types import VideoInfoDict, PlaylistInfoDict, ChannelInfoDict, EntryInPlaylist
@@ -383,7 +383,7 @@ def bring_playlist_info(url: str, logger=None, change_lang: bool = False) -> Pla
 
 
 def bring_video_info(url: str,
-                     playlist_name: str = "",
+                     playlist_name: str = "", playlist_uploader: str = "",
                      logger=None) -> tuple[VideoInfoDict, str | None]:
     """
     전체 수, 댓글 전체수는 제한 없고 각 댓글마다 5개씩 20개 가져옴
@@ -418,6 +418,8 @@ def bring_video_info(url: str,
             info_dict["title"] = format_filename(info_dict.get("title"))
             if playlist_name:  # 비디오에서는 플리명을 모르기 때문에
                 info_dict["playlist"] = playlist_name
+            if playlist_uploader:
+                info_dict["playlist_uploader"] = playlist_uploader
 
             # for key in ["formats", "requested_formats", "automatic_captions", "heatmap", "thumbnails", "heatmap",]:
                 # if key in info_dict.keys():

@@ -98,7 +98,6 @@ class VideoInfoDict(TypedDict, total=False):
     uploader_url: str
     upload_date: str
     availability: Availability
-    playlist: str
     duration_string: str
     is_live: bool
     was_live: bool
@@ -111,6 +110,8 @@ class VideoInfoDict(TypedDict, total=False):
     meta_album: str
     meta_artist: str
     meta_comment: str
+    playlist: str
+    playlist_uploader: str
     purl: str
 
 
@@ -146,13 +147,13 @@ class Chapter(TypedDict, total=False):
     end_time: int | float
 
 
-def is_channel_info_dict(info_dict: ChannelInfoDict | PlaylistInfoDict) -> TypeGuard[ChannelInfoDict]:
+def is_channel_info_dict(info_dict: ChannelInfoDict | PlaylistInfoDict | dict) -> TypeGuard[ChannelInfoDict]:
     entries = info_dict['entries']
     entry_type = entries[0]['_type']
     return entry_type == "playlist"  # 채널이면 엔트리 내에 플리 있음
 
 
-def is_playlist_info_dict(info_dict: ChannelInfoDict | PlaylistInfoDict) -> TypeGuard[PlaylistInfoDict]:
+def is_playlist_info_dict(info_dict: ChannelInfoDict | PlaylistInfoDict | dict) -> TypeGuard[PlaylistInfoDict]:
     entries = info_dict['entries']
     entry_type = entries[0]['_type']
     return not entry_type == "playlist"  # 플리이면 엔트리 내에 영상 있음

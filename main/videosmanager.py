@@ -55,6 +55,8 @@ class VideosManager:
         parent_file_dir: str = "",
         additional_videos_dict_keys: dict[str,
                                           Callable[[VideoInfoDict], Any]] = None,
+        download_archive_name: Literal["down_archive",
+                                       "%(playlist)s (%(playlist_uploader)s)", "%(channel)s", "FILE_NAME"] | str = 'down_archive',
         video_force_update: bool | Literal["just_bring"] = False,
         default_styles: list[str | Style] = None,
     ):
@@ -66,6 +68,11 @@ class VideosManager:
             parent_file_dir: 정보,에러,다운메니져 폴더가 위치할 위치. 기본은 비디오 채널명 폴더와 같은 위치
             additional_videos_dict_keys: 비디오스의 비디오 정보 딕셔너리에 추가할 키 값의 이름과 함수
             video_force_update: datas에 기록된 정보의 업데이트 여부. just_bring이면 정보를 기록하지 않음. true면 강제 업데이트, false면 최초 1회만 업데이트
+            download_archive_name: 
+                - down_archive: 프로그램에 상관없이 폴더 내의 영상이 전부 한 아카이브에 저장
+                - %(playlist)s: 플레이리스트 별로 나뉨
+                - %(channel)s: 채널별로 나뉨
+                - FILE_NAME: 파일명을 가져와 기록
             default_styles: 표들의 스타일이 지정되지 않았을 경우 이 스타일로 일괄 지정
             playlist_videos_init_kwargs: 리스트 말고 키(비디오 딕셔너리):벨류 형태로도 지정 가능
         """
@@ -73,8 +80,11 @@ class VideosManager:
             parent_file_dir = parent_videos_dir
         self.data_path = f"{parent_file_dir}\\Data"  # 이건 그대로
 
-        self._playlist_data_path = f"{self.data_path}\\playlist_data"
-        self._channel_data_path = f"{self.data_path}\\channel_data"
+        # 이걸 여기서 정의하는 게 나을까...? 플리랑 채널은 고정적이긴 한데 과거의 의도가 기억 안남
+        # 과거의 의도는 나중에 롤백하든 하고 밑에서 정의. 어디 다른데서 쓰던가???
+
+        # self._playlist_data_path = f"{self.data_path}\\playlist_data"
+        # self._channel_data_path = f"{self.data_path}\\channel_data"
         self._thumbnail_path = f"{parent_file_dir}\\Thumbnails"
         self._video_path = f"{parent_videos_dir}\\Videos"
         self.error_path = f"{parent_file_dir}\\Errors"
@@ -183,27 +193,53 @@ class VideosManager:
             self.channel_style_dict_path,
         )
 
-    def __bring_playlist_json(self, url: str, playlist_data_path: str, channel_data_path: str, update: bool = True, called_from_thumbnail: bool = False) -> ChannelInfoDict | PlaylistInfoDict:
-        """채널이어도 스킵x. id 찾는게 꼬일 수 있음. 어처피 링크 잘못돼서 플리 꼬이는 것보다는 몇 초 더 걸리는 게 나음. 썸내일은 어처피 최초 한 번만 되니까 무시
-        여기에 링크 띄우는 거랑 스피너만 추가. 언어는 한국어로"""
+    
+
+    def __bring_playlist_json(self, url: str,
+                              #   playlist_data_path: str, channel_data_path: str,
+                              update: bool = True, called_from_thumbnail: bool = False) -> ChannelInfoDict | PlaylistInfoDict:
+        """링크 띄우는 거랑 스피너만 추가. 언어는 한국어로. 채널 탭은 플리에 저장"""
+        playlist_data_path = f"{self.data_path}\\playlist_data"  # 채널 탭이면 플리와 동일
+        channel_data_path = f"{self.data_path}\\channel_data"
         os.makedirs(playlist_data_path, exist_ok=True)
         os.makedirs(channel_data_path, exist_ok=True)
 
-        id_ = find_id(url)
-        
-        with progress_playlist_data(my_console) as progress:
-            task_id = progress.add_task(f"{url} 정보 가져오는 중...")
+        type_, id_ = find_id(url)
+        # 타입에 따라 필요한 위치에 들어가서 찾기
+        if type_ in "channel":
+            path_to_search = channel_data_path
+        elif type_ == "playlist" or type_ == "channel__tab":
+            path_to_search = playlist_data_path
+        else:  # fail
+            path_to_search = None
+
+        if path_to_search:
+            info_dict = self.__find_json_with_id(id_, path_to_search)
+            if info_dict and not update:
+                if is_channel_info_dict(info_dict):
+                    return info_dict
+                elif is_playlist_info_dict(info_dict):
+                    return info_dict
+                else:
+                    raise ValueError("기본 플레이리스트 정보가 플레이리스트/채널의 형태가 아닙니다")
+
+        # 파일을 못 찾았을 경우
+        with progress_playlist_data() as progress:
+            task_id = progress.add_task(f"{url} 정보 가져오는 중", total=1)
             info_dict = bring_playlist_info(
                 url, LoggerForRich(skip_lang_warning=True), True)
+            progress.update(task_id, description="", completed=1)
 
         info_dict_name = f"{info_dict.get('title')} ({info_dict.get('uploader')}) [{info_dict.get('id')}]"
 
         if is_channel_info_dict(info_dict):
             write_dict_to_json(info_dict_name, info_dict, channel_data_path)
+            return info_dict
         elif is_playlist_info_dict(info_dict):
             write_dict_to_json(info_dict_name, info_dict, playlist_data_path)
-
-        return info_dict
+            return info_dict
+        else:
+            raise ValueError("기본 플레이리스트 정보가 플레이리스트/채널의 형태가 아닙니다")
 
     def __get_thumbnail_colors(
         self, channel_url: str, thumbnail_folder_path: str, console: Console
@@ -437,9 +473,8 @@ class VideosManager:
         downloaded_videos: set[str] = set()
         for videos in self.videos_to_download_list:
             videos.update()
-            [
-                downloaded_videos.add(da) for da in videos.bring_da_list()
-            ]  # 이미 다운된 갯수 초기화
+            [downloaded_videos.add(da)
+             for da in videos._bring_da_list()]  # 이미 다운된 갯수 초기화
             total_videos.update(
                 {
                     id_: title

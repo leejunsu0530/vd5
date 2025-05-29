@@ -35,7 +35,7 @@ def write_dict_to_json(file_name: str, info_dict: dict | ChannelInfoDict | Playl
 
 
 def read_dict_from_json(parent_path: str, file_name: str) -> dict:
-    """딕셔너리 반환"""
+    """딕셔너리 반환. 존재 안하면 빈 딕셔너리"""
     file_path = f"{parent_path}\\{file_name}" if file_name.split(".")[-1] == "json" \
         else f"{parent_path}\\{file_name}.json"
     if not os.path.exists(file_path):

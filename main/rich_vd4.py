@@ -30,7 +30,7 @@ def path_styler(path: str) -> str:
     return path.replace("\\", "/").replace("/", "[bold #ff5c00]/[/]")
 
 
-def progress_video_info(console: Console | None = None) -> Progress:
+def progress_video_info() -> Progress:
     return Progress(
         TextColumn(
             "[bright_cyan]{task.description}[/] "
@@ -51,22 +51,20 @@ def progress_video_info(console: Console | None = None) -> Progress:
         TimeElapsedColumn(),
         TimeRemainingColumn(),
         SpinnerColumn(),
-        console=console,
+        console=my_console,
     )
 
 
-def progress_playlist_data(console: Console | None = None) -> Progress:
-    """사라지게 하는 설정 필요, 메시지 수정은 부르는 쪽에서서"""
+def progress_playlist_data() -> Progress:
+    """사라지게 하는 설정 필요, 메시지 수정은 부르는 쪽에서"""
     return Progress(
         TextColumn(
             "[bright_white]{task.description}[/]",
             justify="left"
         ),
-        "(",
-        TimeElapsedColumn(),
-        ")",
+        "(", TimeElapsedColumn(), "경과)",
         SpinnerColumn("simpleDots"),
-        console=console,
+        console=my_console,
     )
 
 
