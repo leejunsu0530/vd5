@@ -1,7 +1,7 @@
 import os
 import json
 import datetime
-from ..newtypes.new_types import ChannelInfoDict, PlaylistInfoDict
+from ..newtypes.ydl_types import ChannelInfoDict, PlaylistInfoDict
 
 
 def write_str_to_file(file_name: str, to_write: str = "", parent_path: str = os.getcwd()):

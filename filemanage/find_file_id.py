@@ -1,5 +1,5 @@
 import os
-from ..newtypes.new_types import ChannelInfoDict, PlaylistInfoDict
+from ..newtypes.ydl_types import ChannelInfoDict, PlaylistInfoDict
 from .filesave import read_dict_from_json
 from typing import cast
 

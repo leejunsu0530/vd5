@@ -14,7 +14,7 @@ from ..newtypes.dict_list import (
     dict_set_union,
 )
 from ..newtypes.dict_formatting import dict_formatting
-from ..newtypes.new_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, VideoInfoDict, EntryInPlaylist
+from ..newtypes.ydl_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, VideoInfoDict, EntryInPlaylist
 from .rich_vd4 import make_info_table, Table, my_console, path_styler
 
 CODE_FILE_PATH = bring_file_name_no_ext()

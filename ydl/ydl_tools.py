@@ -4,7 +4,7 @@ from typing import Callable, Any, Literal
 import yt_dlp  # type: ignore
 
 from ..newtypes.format_str_tools import format_filename
-from ..newtypes.new_types import VideoInfoDict, PlaylistInfoDict, ChannelInfoDict, EntryInPlaylist
+from ..newtypes.ydl_types import VideoInfoDict, PlaylistInfoDict, ChannelInfoDict, EntryInPlaylist
 
 from .timestamp_parser import parse_chapters
 

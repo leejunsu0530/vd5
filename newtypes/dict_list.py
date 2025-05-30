@@ -1,5 +1,5 @@
 import json
-from ..newtypes.new_types import VideoInfoDict, EntryInPlaylist
+from .ydl_types import VideoInfoDict, EntryInPlaylist
 
 
 def bring_key_list(lst: list[dict], key: str) -> list:

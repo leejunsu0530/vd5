@@ -42,7 +42,7 @@ from .rich_vd4 import (
     group_text_and_progress,
 )
 from .videos import Videos
-from ..newtypes.new_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, EntryInPlaylist, VideoInfoDict, is_channel_info_dict, is_playlist_info_dict
+from ..newtypes.ydl_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, EntryInPlaylist, VideoInfoDict, is_channel_info_dict, is_playlist_info_dict
 
 install(show_locals=True)
 
