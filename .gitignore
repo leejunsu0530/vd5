@@ -1,0 +1,12 @@
+__pycache__/__init__.cpython-311.pyc
+filemanage/__pycache__/filesave.cpython-311.pyc
+main/__pycache__/rich_VD4.cpython-311.pyc
+main/__pycache__/videos.cpython-311.pyc
+main/__pycache__/videosmanager.cpython-311.pyc
+newtypes/__pycache__/dict_formatting.cpython-311.pyc
+newtypes/__pycache__/dict_list.cpython-311.pyc
+newtypes/__pycache__/format_str_tools.cpython-311.pyc
+newtypes/__pycache__/new_types.cpython-311.pyc
+ydl/__pycache__/timestamp_parser.cpython-311.pyc
+ydl/__pycache__/ydl_tools.cpython-311.pyc
+ydl/__pycache__/youtube_url_tools.cpython-311.pyc
