@@ -10,6 +10,8 @@ from rich.console import Console
 from rich.live import Live
 from rich.text import Text
 
+from ..filemanage import file_with_id  # 이건 별로 자주 안쓰이니까 한번에 바인딩
+from ..filemanage.list_all_files import list_all_files
 from ..filemanage.filesave import (
     write_dict_to_json,
     read_dict_from_json,
@@ -32,17 +34,29 @@ from ..ydl.extcolors_from_thumbnail import (
 )
 from ..newtypes.format_str_tools import format_byte_str
 
-from .rich_vd4 import (
+from ..richtext.rich_vd4 import (
     my_console,
     LoggerForRich,
-    progress_video_info,
-    progress_playlist_data,
+
     default_keys_to_show,
     make_info_table,
     group_text_and_progress,
 )
+from ..richtext.return_progress import (
+    progress_video_info,
+    progress_playlist_data
+)
+
 from .videos import Videos
-from ..newtypes.ydl_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, EntryInPlaylist, VideoInfoDict, is_channel_info_dict, is_playlist_info_dict
+from ..newtypes.ydl_types import (
+    MAJOR_KEYS,
+    ChannelInfoDict,
+    PlaylistInfoDict,
+    EntryInPlaylist,
+    VideoInfoDict,
+    is_channel_info_dict,
+    is_playlist_info_dict
+)
 
 install(show_locals=True)
 
@@ -105,10 +119,16 @@ class VideosManager:
             if isinstance(videos, str):
                 videos = Videos(videos)
 
-            # 채널 정보 가져와서 영상 목록 뽑아내기
+            # 채널 정보 가져오기와 기본값 설정.
             playlist_url = videos.playlist_url
             playlist_info_dict = self.__bring_playlist_json(
-                playlist_url, self._playlist_data_path, self._channel_data_path)
+                playlist_url)  # 여기 추가 수정 필요
+            videos.playlist_info_dict = playlist_info_dict
+
+        for videos in playlist_videos_init:
+            #  그후에 세부 영상 추출. 이미 존재하는 비디오스면 세부 영상 추출x
+            # 채널 정보 가져와서 영상 목록 뽑아내기
+            playlist_info_dict = videos.playlist_info_dict
             channel_name = playlist_info_dict["channel"]  # 채널로 할지 업로더로 할지?
 
             if not videos.list_all_videos:  # 기존 비디오스를 재사용하는 게 아니면
@@ -121,18 +141,19 @@ class VideosManager:
                     for playlist in playlist_info_dict["entries"]:
                         entries += extract_playlist_entries(playlist)
 
-                # "private", "premium_only", "subscriber_only", "needs_auth", "unlisted" or "public"
                 # 조건에 맞지 않으면 리스트에서 제거
+                restricted_non_private = [
+                    "premium_only", "subscriber_only", "needs_auth", "unlisted"]
+                restricted = restricted_non_private + ["private"]
                 entries = [
                     entry for entry in entries if videos.video_bring_restrict(entry)]
-                cannot_download = [entry for entry in entries if entry.get("availability")
-                                   in ("premium_only", "subscriber_only", "needs_auth", "unlisted")]  # 이 중 하나면 cannot d에 넣기
-
+                cannot_download = [entry for entry in entries if entry.get(
+                    "availability") in restricted_non_private]
                 entries = [
                     entry for entry in entries
-                    if not entry.get("availability") in ("premium_only", "subscriber_only", "needs_auth", "unlisted", "private")
-                    or "[Private video]" not in entry['title']
-                ]  # 이 조건이 아니면 처리
+                    if not entry.get("availability") in restricted
+                    and "[Private video]" not in entry['title']
+                ]
 
                 # 구체화 정보 가져와서 비디오스로 넣기
                 videos.list_all_videos = (
@@ -193,8 +214,6 @@ class VideosManager:
             self.channel_style_dict_path,
         )
 
-    
-
     def __bring_playlist_json(self, url: str,
                               #   playlist_data_path: str, channel_data_path: str,
                               update: bool = True, called_from_thumbnail: bool = False) -> ChannelInfoDict | PlaylistInfoDict:
@@ -214,7 +233,7 @@ class VideosManager:
             path_to_search = None
 
         if path_to_search:
-            info_dict = self.__find_json_with_id(id_, path_to_search)
+            info_dict = file_with_id.read_json(id_, path_to_search)
             if info_dict and not update:
                 if is_channel_info_dict(info_dict):
                     return info_dict

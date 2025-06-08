@@ -4,7 +4,7 @@ from .filesave import read_dict_from_json
 from typing import cast
 
 
-def read_json_with_id(id_: str, dir_path: str) -> PlaylistInfoDict | ChannelInfoDict | None:
+def read_json(id_: str, dir_path: str) -> PlaylistInfoDict | ChannelInfoDict | None:
     for file_name in os.listdir(dir_path):
         file_id = file_name.rsplit(" ", 1)[-1].strip("[]")
         # 파일명을 공백을 기준으로 왼쪽에서 1번 끊고 거기서 [나 ]를 모두 제거 > id나 id__tab꼴.
@@ -16,7 +16,7 @@ def read_json_with_id(id_: str, dir_path: str) -> PlaylistInfoDict | ChannelInfo
     return None
 
 
-def find_path_with_id(id_: str, dir_path: str) -> str | None:
+def find_path(id_: str, dir_path: str) -> str | None:
     """아마 비디오 무결성 시 사용될듯"""
     for file_name in os.listdir(dir_path):
         file_id = file_name.rsplit(" ", 1)[-1].strip("[]")

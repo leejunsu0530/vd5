@@ -95,6 +95,155 @@ class ChangeInfoDict(yt_dlp.postprocessor.PostProcessor):
         return [], information
 
 
+class Download:
+    """값에 안전딕셔너리 씌우는건 밖에서 infod 접근해서 하기"""
+
+    def __init__(self,
+                 save_path: str,
+                 urls: list[str] | str,
+                 *,
+                 filename_template: str = "{inner_folder}%(title)s (%(uploader)s).%(ext)s",
+                 chaptername_template: str = "{inner_folder}%(title)s - %(section_title)s (%(uploader)s).%(ext)s",
+                 inner_folder: str = "",
+                 thumbnail_path: str = "",
+                 download_archive_path: str = os.getcwd(),
+                 download_archive_name: str = None,
+                 temp_path: str = "",
+                 split_chapters: Literal["separately",
+                                         "in_video_named_folder", False] = False,
+                 embed_info_json: bool = False,
+                 progress_hook: Callable[[VideoInfoDict], None] = None,
+                 concurrent_fragments: int = min(
+                     32, (os.cpu_count() or 1) + 4),
+                 ignore_errors: bool | Literal['only_download'] = "only_download",
+                 skip_hls_or_dash: list[Literal["dash", "m3u8"]] | None = None,
+                 logger=None,
+                 quiet: bool = True,
+                 progress_delta: float = 0,
+                 additional_info_dict: VideoInfoDict = None) -> None:
+        """
+        
+        Args:
+            save_path: 파일을 저장할 경로
+            urls: 영상의 url 또는 url 리스트
+            filename_template: 
+            chaptername_template: 
+            inner_folder: 
+            thumbnail_path: 
+            download_archive_path: 
+            download_archive_name: 
+            temp_path: 
+            split_chapters: 
+            embed_info_json: 
+            progress_hook: 
+            concurrent_fragments: 
+            ignore_errors: 
+            skip_hls_or_dash: 
+            logger=None,
+            quiet: 
+            progress_delta: 
+            additional_info_dict: 
+        """
+        if isinstance(urls, str):
+            urls = [urls]
+        if inner_folder:
+            inner_folder += "\\"
+
+        self.urls = urls
+        self.additional_info_dict = additional_info_dict
+
+        self.ydl_opts: dict[str, Any] = {
+            "concurrent_fragment_downloads": concurrent_fragments,
+            "extractor_args": {"youtube": {"skip": ["translated_subs"]}},
+            "noprogress": False,
+            "outtmpl": {
+                "default": filename_template.format(inner_folder=inner_folder),
+                "chapter": chaptername_template.format(inner_folder=inner_folder),
+            },
+            "paths": {
+                "home": save_path,
+                "chapter": save_path,  # 챕터는 폴더에 넣을까?
+                "temp": temp_path if temp_path else f"{save_path}\\temp",
+                "thumbnail": (thumbnail_path if thumbnail_path else f"{save_path}\\thumbnails"),
+            },
+            "postprocessors": [
+                {
+                    "format": "jpg",
+                    "key": "FFmpegThumbnailsConvertor",
+                    "when": "before_dl"
+                },
+                {
+                    "already_have_subtitle": False,
+                    "key": "FFmpegEmbedSubtitle"
+                },
+                {
+                    "already_have_thumbnail": True,
+                    "key": "EmbedThumbnail"
+                },
+                {
+                    "add_chapters": True,
+                    "add_infojson": embed_info_json,
+                    "add_metadata": True,
+                    "key": "FFmpegMetadata",
+                }
+            ],
+            "subtitleslangs": ["kr", "jp", "en"],
+            "writesubtitles": True,
+            "quiet": quiet,
+            "writethumbnail": True,  # 없으면 썸내일 안들어감
+            "ignoreerrors": ignore_errors,
+            "nopart": True,
+            "progress_delta": progress_delta,
+        }
+
+        if split_chapters:
+            self.ydl_opts["postprocessors"].append({
+                "force_keyframes": False,
+                "key": "FFmpegSplitChapters"
+            })
+        if progress_hook:
+            self.ydl_opts["progress_hooks"] = [progress_hook]
+        if download_archive_name:  # 이름 빈칸으로 하면 x
+            self.ydl_opts["download_archive"] = (
+                f"{download_archive_path}\\{download_archive_name}"
+                if download_archive_path else download_archive_name)
+        if skip_hls_or_dash:
+            self.ydl_opts["extractor_args"]["youtube"]["skip"] += skip_hls_or_dash
+        if logger:
+            self.ydl_opts["logger"] = logger
+        # ydl은 어처피 ydl_opt가 밑에서 더 추가돼야 하므로 그냥 with로 쓰기
+
+    def download_video(self,
+                       restrict_format: str = "[height<=1080]",
+                       ext: str = "mkv") -> int:
+
+        ydl_opts = self.ydl_opts
+        ydl_opts["format"] = f"bestvideo{restrict_format}+bestaudio/best{restrict_format}"
+        ydl_opts["merge_output_format"] = ext
+
+        with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
+            ydl.add_post_processor(ChangeInfoDict(
+                info_dict=self.additional_info_dict), when='before_dl')
+            error_code = ydl.download(self.urls)
+
+        return error_code
+
+    def download_music(self):
+        """"final_ext": "mka",
+        "format": "bestaudio/best",
+        {
+                "key": "FFmpegExtractAudio",
+                "nopostoverwrites": False,
+                "preferredcodec": "best",
+                "preferredquality": "0",
+            },
+            {
+                "key": "FFmpegVideoRemuxer",
+                "preferedformat": "mka"
+            },"""
+        pass
+
+
 def download_video(
     *,
     video_path: str,

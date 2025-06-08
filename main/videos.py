@@ -15,7 +15,7 @@ from ..newtypes.dict_list import (
 )
 from ..newtypes.dict_formatting import dict_formatting
 from ..newtypes.ydl_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, VideoInfoDict, EntryInPlaylist
-from .rich_vd4 import make_info_table, Table, my_console, path_styler
+from ..richtext.rich_vd4 import make_info_table, Table, my_console, path_styler
 
 CODE_FILE_PATH = bring_file_name_no_ext()
 
@@ -52,6 +52,7 @@ class Videos:
 
         """
         # 메니져가 정의해주는 변수
+        self.playlist_info_dict: ChannelInfoDict | PlaylistInfoDict = None  # type: ignore
         self.down_archive_path = ""
         self.channel_name = ""
         self.video_path = ""
@@ -70,7 +71,8 @@ class Videos:
         self.additional_keys: dict[str, Callable[[VideoInfoDict], Any]] = {
             "repeated": check_is_repeated,  # 중복 분류는 구현이 어려움. 중복 확인만 하기
             "is_downloaded": lambda video_dict: (
-                True if video_dict.get("id") in self._bring_da_list() else False
+                True if video_dict.get(
+                    "id") in self._bring_da_list() else False
             ),
         }
 
