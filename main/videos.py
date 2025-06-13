@@ -32,7 +32,7 @@ class Videos:
         ) = "",
         styles: list[Style | str] | Style | str | None = None,
         split_chapter: bool = False,
-        # update_playlist_data: bool = True,
+        update_playlist_data: bool = True,
         custom_da: bool = False,
         artist_name: str = "",
         album_title: str = "",
@@ -46,13 +46,14 @@ class Videos:
             inner_folder_split: 내부에 폴더로 나눔. '%(upload_date>%Y.%m)s' (날짜 월별로 묶기), '%(uploader)s' (업로더 채널명으로 묶기), '%(playlist)s' (플레이리스트 이름으로 묶기). 자세한 건 https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#output-template 의 출력 탬플릿 참조.
             styles: 첫번째 스타일은 표나 정보 등에 사용됨. 스타일 리스트나 스타일, 문자열로 지정가능. 기본적으로는 채널 썸내일에서 주요 색 가져옴. 자세한 건 https://rich.readthedocs.io/en/stable/style.html 참조
             split_chapter: 챕터별로 영상을 분리할지 여부.
+            update_playlist_data: 플리 데이터를 수정할지 여부
             custom_da: 다운로드 아카이브를 커스텀 경로에 저장할지 여부
             artist_name: 작곡가로 들어갈 이름. 기본적으로 채널명으로 자동지정됨.
             album_title: 엘범 제목. 기본적으로 플리명으로 자동지정됨.
 
         """
         # 메니져가 정의해주는 변수
-        self.playlist_info_dict: ChannelInfoDict | PlaylistInfoDict = None  # type: ignore
+        self.playlist_info_dict: ChannelInfoDict | PlaylistInfoDict | None = None
         self.down_archive_path = ""
         self.channel_name = ""
         self.video_path = ""
@@ -81,7 +82,7 @@ class Videos:
         self.video_bring_restrict: Callable[[
             EntryInPlaylist], bool] = video_bring_restrict if video_bring_restrict else lambda dict_: True
 
-        # self.update_playlist_data = update_playlist_data
+        self.update_playlist_data = update_playlist_data
         self.inner_split_by = inner_folder_split
         self.split_chapter = split_chapter
         self.custom_da = custom_da

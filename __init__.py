@@ -1,5 +1,5 @@
 from sys import version_info
-from .modulemanage.module_update import check_and_update_module
+from .modulemanage.module_update import check_and_update
 # ------------------------------
 from .main.videosmanager import VideosManager
 from .main.videos import Videos
@@ -19,7 +19,7 @@ if not version_info >= (3, 11):
     raise ImportError("Only Python versions 3.11 and above are supported")
 
 # yt-dlp 확인
-check_and_update_module('yt-dlp', "ask")
+check_and_update('yt-dlp', "ask")
 
 __all__ = ["VideosManager", "Videos", "con", "formatstr", "ask", "print_code", "new_sum", "Text", "Style"]
 

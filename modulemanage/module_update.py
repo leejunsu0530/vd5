@@ -2,89 +2,139 @@ import requests
 from packaging import version
 import importlib.metadata
 
-from .execute_cmd import execute_cmd
+from .execute_cmd import execute_cmd_realtime
 from ..richtext.ask_prompt import ask_y_or_n
+
 import sys
-from typing import Union, Literal
+from typing import Literal, Callable
+
+from rich.console import Console
+from rich.live import Live
+from rich.panel import Panel
+from rich.text import Text
 
 
-def get_current_version(package_name: str, print_: bool = True) -> str | None:
+# 좀 더 rich 의존적이게 수정함
+
+
+def get_current_version(package_name: str) -> tuple[str | None, str]:
+    """
+    Return:
+        (version, message)
+    """
     try:
         v = importlib.metadata.version(package_name)
-        if print_:
-            print(f"설치된 현재 버전: {v}")
-        return v
+        return v, f"설치된 현재 버전: {v}"
     except importlib.metadata.PackageNotFoundError:
-        if print_:
-            print("패키지를 찾을 수 없습니다.")
-        return None
+        return None, "패키지를 찾을 수 없습니다."
 
 
-def get_latest_version_pypi(package_name: str, print_: bool = True) -> str | None:
+def get_latest_version_pypi(package_name: str) -> tuple[str | None, str]:
     url = f"https://pypi.org/pypi/{package_name}/json"
-    response = requests.get(url)
+    response = requests.get(url, timeout=5)
     if response.status_code == 200:
         data = response.json()
-        return data["info"]["version"]
+        latest_version = data["info"]["version"]
+        return latest_version, f"최신 {package_name} 버전: {latest_version}"
     else:
-        if print_:
-            print("PyPI에서 데이터를 가져오는 중 오류 발생")
-        return None
+        return None, "PyPI에서 데이터를 가져오는 중 오류 발생"
 
 
-def compare_version(current_version: str, latest_version: str, print_: bool = True) -> bool:
+def compare_version(current_version: str, latest_version: str) -> tuple[bool, str]:
     if version.parse(current_version) < version.parse(latest_version):
-        if print_:
-            print("업데이트가 필요합니다.")
-        return True
+        return True, "업데이트가 필요합니다."
     else:
-        if print_:
-            print("이미 최신 버전을 사용 중입니다.")
-        return False
+        return False, "이미 최신 버전을 사용 중입니다."
 
 
-def check_and_compare_versions(module_name: str) -> tuple[str, str, bool] | None:
-    """현 모듈, 최신 모듈, 업데이트 필요 여부"""
-    current = get_current_version(module_name, False)
-    if not current:
-        return None
-    latest = get_latest_version_pypi(module_name, False)
-    if not latest:
-        return None
-    need_update = compare_version(current, latest, False)
-    return current, latest, need_update
+def update_module(to_update: str, print_: Callable = print, print_kwargs: dict = None) -> None:
+    execute_cmd_realtime(
+        f"{sys.executable} -m pip install --upgrade {to_update}", print_, print_kwargs)
 
 
-def update_module(module_name: str, print_: bool = True) -> str:
-    # subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', 'module_name'])
-    result = execute_cmd([sys.executable, '-m', 'pip', 'install', '--upgrade', module_name], shell=False)
-    if print_:
-        print(result)
-    return result
-
-
-def check_and_update_module(module_name: str, update: Union[bool, Literal["ask"]] = True, print_: bool = True) -> int:
+def check_and_update(module_name: str, module_name_to_update: str,
+                     update: bool | Literal["ask"] = "ask",
+                     print_: Callable = print, print_kwargs: dict = None) -> int:
     """에러코드는 0이 성공, 1이 실패,
     update가 'ask'면 프롬프트로 물어봄"""
-    if print_:
-        print(f"모듈 이름: {module_name}")
-    current = get_current_version(module_name, print_)
-    if not current:
+    if not module_name_to_update:
+        module_name_to_update = module_name
+    if print_kwargs is None:
+        print_kwargs = {}
+
+    print_(f"현재 가상환경: {sys.executable}", **print_kwargs)
+    print_(f"모듈 이름: {module_name}", **print_kwargs)
+
+    current_version, message = get_current_version(module_name)
+    print_(message, **print_kwargs)
+    if not current_version:
+        return 1  # 오류로 종료
+
+    latest_version, message = get_latest_version_pypi(module_name)
+    print_(message, **print_kwargs)
+    if not latest_version:
         return 1
-    latest = get_latest_version_pypi(module_name, print_)
-    if not latest:
-        return 1
-    need_update = compare_version(current, latest, print_)
+
+    need_update, message = compare_version(current_version, latest_version)
+    print_(message, **print_kwargs)
+
     if need_update:
         if update == "ask":
             update = ask_y_or_n("모듈을 업데이트하시겠습니까?")
-        if update:
-            result = update_module(module_name, print_)
-            if result.startswith("Error:"):
-                return 1
+
+        if update:  # true면
+            update_module(module_name_to_update, print_, print_kwargs)
     print()
     return 0
 
 
-if __name__ == '__main__':
-    check_and_update_module('yt-dlp', "ask")
+def check_and_update_in_panel(module_name: str, module_name_to_update: str,
+                              update: bool | Literal["ask"] = "ask", console: Console = None) -> Literal[1] | Literal[0]:
+    if console is None:
+        new_console = Console()
+    else:
+        new_console = console
+    lines = []
+
+    def updater(new_line: str) -> None:
+        lines.append(new_line)
+        panel_text = new_console.highlighter(
+            Text("\n".join(lines), style="bold"))
+        live.update(Panel(panel_text))  # 클로져 지원되니까 이거 문제 x
+
+    with Live(Panel("시작 중..."), console=new_console, refresh_per_second=4, transient=False) as live:
+        if not module_name_to_update:
+            module_name_to_update = module_name
+
+        updater(f"현재 가상환경: {sys.executable}")
+        updater(f"모듈 이름: {module_name}")
+
+        current_version, message = get_current_version(module_name)
+        updater(message)
+        if not current_version:
+            return 1  # 오류로 종료
+
+        latest_version, message = get_latest_version_pypi(module_name)
+        updater(message)
+        if not latest_version:
+            return 1
+
+        need_update, message = compare_version(current_version, latest_version)
+        updater(message)  # 이 아래 질문에서 꺠지기 때문에 별도의 패널로 분리
+
+    lines = []
+    if need_update:
+        if update == "ask":
+            update = ask_y_or_n("모듈을 업데이트하시겠습니까?")
+
+        if update:  # true면
+            with Live(Panel("시작 중..."), console=new_console, refresh_per_second=4, transient=False) as live:
+                update_module(module_name_to_update, updater)
+        print()
+    return 0
+
+
+# if __name__ == '__main__':
+# 여기 .임포트라 테스트 안됨
+# check_and_update_in_panel(
+    # 'yt-dlp', "yt-dlp[default,curl-cffi]", "ask", con)

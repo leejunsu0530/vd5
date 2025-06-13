@@ -122,7 +122,7 @@ class Download:
                  progress_delta: float = 0,
                  additional_info_dict: VideoInfoDict = None) -> None:
         """
-        
+
         Args:
             save_path: 파일을 저장할 경로
             urls: 영상의 url 또는 url 리스트
@@ -157,8 +157,8 @@ class Download:
             "extractor_args": {"youtube": {"skip": ["translated_subs"]}},
             "noprogress": False,
             "outtmpl": {
-                "default": filename_template.format(inner_folder=inner_folder),
-                "chapter": chaptername_template.format(inner_folder=inner_folder),
+                "default": inner_folder + filename_template,
+                "chapter": inner_folder + chaptername_template,
             },
             "paths": {
                 "home": save_path,

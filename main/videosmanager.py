@@ -67,6 +67,8 @@ class VideosManager:
         *playlist_videos_init: Videos | str,
         parent_videos_dir: str = f"{os.getcwd()}\\downloads",
         parent_file_dir: str = "",
+        save_folder_form: Literal["%(playlist)s", "%(playlist)s (%(channel)s)",
+                                  "%(channel)s/%(playlist)s", ""] | str = "%(playlist)s",
         additional_videos_dict_keys: dict[str,
                                           Callable[[VideoInfoDict], Any]] = None,
         download_archive_name: Literal["down_archive",
@@ -121,9 +123,12 @@ class VideosManager:
 
             # 채널 정보 가져오기와 기본값 설정.
             playlist_url = videos.playlist_url
-            playlist_info_dict = self.__bring_playlist_json(
-                playlist_url)  # 여기 추가 수정 필요
-            videos.playlist_info_dict = playlist_info_dict
+            if playlist_url.startswith("video:"):
+                pass  # 이건 가장 나중에 추가, 방식도 좀 수정해야 함. 이거에 한정해서 리스트로 받는 별도의 클래스를 만든다던가
+
+            videos.playlist_info_dict = self.__bring_playlist_json(
+                playlist_url, videos.update_playlist_data)
+            videos.channel_name = videos.playlist_info_dict["channel"]
 
         for videos in playlist_videos_init:
             #  그후에 세부 영상 추출. 이미 존재하는 비디오스면 세부 영상 추출x
@@ -213,6 +218,29 @@ class VideosManager:
             self.channel_style_dict,
             self.channel_style_dict_path,
         )
+
+    def _init_videos_info(self, videos_list: list[Videos | str]) -> None:
+        """flat한 데이터 가져오고 프로그래스 띄우기. 그 외 파일형식 지정같은건 위에서 처리&프로그래스x. 여긴 flat 데이터 관련 부분만"""
+        # 위 식 분리해서 옮기기
+        new_videos_list = [videos if isinstance(
+            videos, Videos) else Videos(videos) for videos in videos_list]
+        for videos in new_videos_list:
+            pl_url = videos.playlist_url
+            if pl_url.startswith("video:"):
+                pass  # 이건 가장 나중에 추가, 방식도 좀 수정해야 함. 이거에 한정해서 리스트로 받는 별도의 클래스를 만든다던가
+
+            pl_info_dict = self.__bring_playlist_json(
+                pl_url, videos.update_playlist_data)
+            videos.playlist_info_dict = pl_info_dict
+            videos.channel_name = pl_info_dict['channel']
+            if not videos.pl_folder_name:  # 임시:이 조건문은 이제 제거해도 됨. 아마? 일단 남기기
+                videos.pl_folder_name = pl_info_dict["title"]
+
+            # 경로 설정도 그냥 여기서? 플리 데이터 쓰는게 많아서서. <- x 인자가 개같이 많아짐
+
+    def _init_videos_data(self):
+        """내부 비디오들 데이터 가져오고 프로그래스 띄우기"""
+        pass
 
     def __bring_playlist_json(self, url: str,
                               #   playlist_data_path: str, channel_data_path: str,
