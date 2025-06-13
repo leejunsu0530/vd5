@@ -606,9 +606,10 @@ def extract_playlist_entries(data_playlist: PlaylistInfoDict) -> list[EntryInPla
     """두개의 플리를 제공받아 이름을 변경하고 플레이리스트 필드를 체움. 채널의 경우는 이 함수를 여러번 적용"""
     entries = data_playlist["entries"]
 
-    for entry in entries:
+    for idx, entry in enumerate(entries):
         # 구버전 이름부터 한글 이름으로. 플리를 두번 가져와서 이름만 수정한 플리로 제공
         entry["old_title"] = entry['title']
         entry["title"] = format_filename(entry["title"])
         entry['playlist'] = data_playlist["title"]
+        entry["playlist_count"] = idx
     return entries

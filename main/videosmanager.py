@@ -67,8 +67,8 @@ class VideosManager:
         *playlist_videos_init: Videos | str,
         parent_videos_dir: str = f"{os.getcwd()}\\downloads",
         parent_file_dir: str = "",
-        save_folder_form: Literal["%(playlist)s", "%(playlist)s (%(channel)s)",
-                                  "%(channel)s/%(playlist)s", ""] | str = "%(playlist)s",
+        video_save_dir_form: Literal["%(playlist)s", "%(playlist)s (%(channel)s)",
+                                     "%(channel)s/%(playlist)s", ""] | str = "%(playlist)s",
         additional_videos_dict_keys: dict[str,
                                           Callable[[VideoInfoDict], Any]] = None,
         download_archive_name: Literal["down_archive",
@@ -82,6 +82,11 @@ class VideosManager:
             playlist_videos_init: Videos로 각각의 링크 설정. 링크만 넣어도 됨
             parent_videos_dir: 비디오의 채널명 폴더가 위치할 위치
             parent_file_dir: 정보,에러,다운메니져 폴더가 위치할 위치. 기본은 비디오 채널명 폴더와 같은 위치
+            video_save_dir_form: 비디오를 저장할 경로의 형태
+                - %(playlist)s: 플레이리스트 이름 폴더로 나눔
+                - %(playlist)s (%(channel)s): '플레이리스트명 (채널명)'폴더에 저장
+                - %(channel)s/%(playlist)s: 채널명 폴더 내 플레이리스트 폴더에 저장
+                - (빈칸): 그냥 구별하는 폴더 없이 Videos 폴더에 영상을 저장
             additional_videos_dict_keys: 비디오스의 비디오 정보 딕셔너리에 추가할 키 값의 이름과 함수
             video_force_update: datas에 기록된 정보의 업데이트 여부. just_bring이면 정보를 기록하지 않음. true면 강제 업데이트, false면 최초 1회만 업데이트
             download_archive_name: 
@@ -94,18 +99,12 @@ class VideosManager:
         """
         if not parent_file_dir:
             parent_file_dir = parent_videos_dir
-        self.data_path = f"{parent_file_dir}\\Data"  # 이건 그대로
-
-        # 이걸 여기서 정의하는 게 나을까...? 플리랑 채널은 고정적이긴 한데 과거의 의도가 기억 안남
-        # 과거의 의도는 나중에 롤백하든 하고 밑에서 정의. 어디 다른데서 쓰던가???
-
-        # self._playlist_data_path = f"{self.data_path}\\playlist_data"
-        # self._channel_data_path = f"{self.data_path}\\channel_data"
+        self.data_path = f"{parent_file_dir}\\Data"
         self._thumbnail_path = f"{parent_file_dir}\\Thumbnails"
         self._video_path = f"{parent_videos_dir}\\Videos"
         self.error_path = f"{parent_file_dir}\\Errors"
         self._down_archive_path = f"{parent_file_dir}\\Download_archives"
-        self.temp_path = f"{parent_videos_dir}\\Temp"
+        self._temp_path = f"{parent_videos_dir}\\Temp"
         self._channel_thumbnail_path = f"{self._thumbnail_path}\\Channel_thumbnails"
         self.channel_style_dict_path = self.data_path
         self.channel_style_dict_name = "channel_style.json"
@@ -117,26 +116,94 @@ class VideosManager:
             self.channel_style_dict_path, self.channel_style_dict_name
         )  # 없으면 빈 딕셔너리
 
-        for videos in playlist_videos_init:
-            if isinstance(videos, str):
-                videos = Videos(videos)
+        new_playlist_videos_init = self._init_videos_info(playlist_videos_init)
 
-            # 채널 정보 가져오기와 기본값 설정.
-            playlist_url = videos.playlist_url
-            if playlist_url.startswith("video:"):
+        self._init_videos_data(new_playlist_videos_init, video_force_update)
+
+        # 경로 설정
+        for videos in new_playlist_videos_init:
+            channel_name = videos.channel_name
+
+            # 이 형태는 각 비디오스 내에서 자기 비디오로 값 대입해야 함
+            videos.video_path = f"{self._video_path}\\{video_save_dir_form}"
+            videos.temp_path = self._temp_path  # temp는 그냥 전체 통합으로
+            videos.error_path = f"{self.error_path}\\{video_save_dir_form}"
+            videos.thumbnail_path = f"{self._thumbnail_path}\\Videos\\{video_save_dir_form}"
+
+            videos.down_archive_path = self._down_archive_path
+            # 이제 다운아카는 여기서 지정.
+            videos.down_archive_name = f"{download_archive_name}.archive"
+            # videos.custom_da_path = f"{self._down_archive_path}\\Custom_down_archives"
+
+            if not videos.styles:  # 비디오스에 유저가 정한 스타일이 없다면
+                if default_styles:  # 유저가 지정한 게 최우선
+                    videos.styles = default_styles  # 일괄 스타일임
+                elif channel_name in self.channel_style_dict:  # 이미 이 채널의 스타일을 지정한 적이 있으면
+                    videos.styles = self.channel_style_dict[channel_name]
+                else:  # 처음 지정하는 채널이면
+                    # 기존에 채널이면 업로더 url 쓰고 플리면 채널 url 쓰던건 빠른 로딩때문인데 그거 지웠으니까 둘 다에 있는 걸로 -> 이거 수정해야 함. 빠른 로딩 있으니까.
+                    # -> 이제 채널 틀리지 않게 가져오니까 상관x일듯
+                    channel_url = videos.playlist_info_dict["channel"]
+
+                    self.channel_style_dict[channel_name] = self.__get_thumbnail_colors(
+                        channel_url, self._channel_thumbnail_path, my_console)
+                    videos.styles = self.channel_style_dict[channel_name]
+
+            if additional_videos_dict_keys:
+                for key, value in additional_videos_dict_keys.items():
+                    videos.additional_keys[key] = value
+
+            videos.update()
+
+        # 왜 이전에 딥카피였는지 모르겠는데 불안하니까
+        self.videos_list = deepcopy(new_playlist_videos_init)
+        self.videos_to_download_list = self.videos_list  
+        write_dict_to_json(
+            self.channel_style_dict_name,
+            self.channel_style_dict,
+            self.channel_style_dict_path,
+        )
+
+    def _init_videos_info(self, playlist_videos_init: tuple[Videos | str, ...]) -> list[Videos]:
+        """flat한 데이터 가져오고 프로그래스 띄우기. 그 외 파일형식 지정같은건 위에서 처리 & 프로그래스x. 여긴 flat 데이터 관련 부분만
+        이미 데이터가 들어있는 경우 (기존 비디오스 재사용) 처리 생략해야 함."""
+        # 위 식 분리해서 옮기기
+        new_videos_init = [videos if isinstance(
+            videos, Videos) else Videos(videos) for videos in playlist_videos_init]
+        for videos in new_videos_init:
+            if videos.playlist_info_dict:
+                continue  # 이미 데이터가 들어있는 경우 처리 생략
+
+            pl_url = videos.playlist_url
+            if pl_url.startswith("video:"):
                 pass  # 이건 가장 나중에 추가, 방식도 좀 수정해야 함. 이거에 한정해서 리스트로 받는 별도의 클래스를 만든다던가
 
-            videos.playlist_info_dict = self.__bring_playlist_json(
-                playlist_url, videos.update_playlist_data)
-            videos.channel_name = videos.playlist_info_dict["channel"]
+            pl_info_dict = self.__bring_playlist_json(
+                pl_url, videos.update_playlist_data)
 
+            # videos내 값 설정
+            videos.playlist_info_dict = pl_info_dict
+            videos.channel_name = pl_info_dict['channel']
+            if not videos.pl_folder_name:  # 임시:이 조건문은 이제 제거해도 됨. 아마? 일단 남기기
+                videos.pl_folder_name = pl_info_dict["title"]
+            if not videos.artist:
+                videos.artist = videos.channel_name
+            if not videos.album:
+                videos.album = videos.pl_folder_name
+
+        return new_videos_init
+
+    def _init_videos_data(self, playlist_videos_init: list[Videos],
+                          video_force_update: bool | Literal["just_bring"]) -> None:
+        """내부 비디오들 데이터 가져오고 프로그래스 띄우기. 기존 비디오스면 패스"""
         for videos in playlist_videos_init:
             #  그후에 세부 영상 추출. 이미 존재하는 비디오스면 세부 영상 추출x
             # 채널 정보 가져와서 영상 목록 뽑아내기
             playlist_info_dict = videos.playlist_info_dict
-            channel_name = playlist_info_dict["channel"]  # 채널로 할지 업로더로 할지?
 
-            if not videos.list_all_videos:  # 기존 비디오스를 재사용하는 게 아니면
+            if videos.list_all_videos:  # 기존 비디오스를 재사용하는거면. 이거 수정 필요. 프로그래스에 합쳐지게
+                my_console.print(f"{videos.pl_folder_name} Videos 가져옴")
+            else:
                 entries: list[EntryInPlaylist] = []
 
                 if is_playlist_info_dict(playlist_info_dict):
@@ -162,85 +229,13 @@ class VideosManager:
 
                 # 구체화 정보 가져와서 비디오스로 넣기
                 videos.list_all_videos = (
-                    self.__bring_detailed_info_list(
+                    self.__bring_detailed_info_list(  # 지금은 바를 여기서 띄움
                         playlist_info_dict["title"],
-                        channel_name,
+                        playlist_info_dict["channel"],
                         entries,
                         video_force_update)
                     + cannot_download
                 )
-            else:
-                my_console.print(f"{videos.pl_folder_name} Videos 가져옴")
-
-            if not videos.pl_folder_name:  # 플리 이름 설정 따로 한게 아니면. 이건 일단 남겨놈
-                videos.pl_folder_name = playlist_info_dict["title"]
-                videos.down_archive_name = f"{videos.pl_folder_name}.archive"
-
-            # 경로설정
-            videos.channel_name = channel_name
-            if not videos.artist:
-                videos.artist = channel_name
-            if not videos.album:
-                videos.album = videos.pl_folder_name
-            videos.video_path = f"{self._video_path}\\{videos.pl_folder_name} ({channel_name})"
-            videos.temp_path = f"{self.temp_path}\\{videos.pl_folder_name} ({channel_name})"
-            videos.error_path = f"{self.error_path}\\{videos.pl_folder_name} ({channel_name})"
-            videos.thumbnail_path = f"{self._thumbnail_path}\\videos\\{videos.pl_folder_name} ({channel_name})"
-            # 채널이 아니라 영상 썸내일 경로임
-            # da이름은 비디오스에서 지정
-            videos.down_archive_path = f"{self._down_archive_path}\\{channel_name}"
-            videos.custom_da_path = f"{self._down_archive_path}\\Custom_down_archives"
-
-            if not videos.styles:  # 비디오스에 유저가 정한 스타일이 없다면
-                if default_styles:  # 유저가 지정한 게 최우선
-                    videos.styles = default_styles  # 일괄 스타일임
-                elif channel_name in self.channel_style_dict:  # 이미 이 채널의 스타일을 지정한 적이 있으면
-                    videos.styles = self.channel_style_dict[channel_name]
-                else:  # 처음 지정하는 채널이면
-                    # 기존에 채널이면 업로더 url 쓰고 플리면 채널 url 쓰던건 빠른 로딩때문인데 그거 지웠으니까 둘 다에 있는 걸로로
-                    channel_url = playlist_info_dict['channel_url']
-
-                    self.channel_style_dict[channel_name] = self.__get_thumbnail_colors(
-                        channel_url, self._channel_thumbnail_path, my_console)
-                    videos.styles = self.channel_style_dict[channel_name]
-
-            if additional_videos_dict_keys:
-                for key, value in additional_videos_dict_keys.items():
-                    videos.additional_keys[key] = value
-
-            videos.update()
-
-            self.videos_list.append(deepcopy(videos))
-
-        self.videos_to_download_list = self.videos_list  # 기본값으로는 바로 다운로드
-        write_dict_to_json(
-            self.channel_style_dict_name,
-            self.channel_style_dict,
-            self.channel_style_dict_path,
-        )
-
-    def _init_videos_info(self, videos_list: list[Videos | str]) -> None:
-        """flat한 데이터 가져오고 프로그래스 띄우기. 그 외 파일형식 지정같은건 위에서 처리&프로그래스x. 여긴 flat 데이터 관련 부분만"""
-        # 위 식 분리해서 옮기기
-        new_videos_list = [videos if isinstance(
-            videos, Videos) else Videos(videos) for videos in videos_list]
-        for videos in new_videos_list:
-            pl_url = videos.playlist_url
-            if pl_url.startswith("video:"):
-                pass  # 이건 가장 나중에 추가, 방식도 좀 수정해야 함. 이거에 한정해서 리스트로 받는 별도의 클래스를 만든다던가
-
-            pl_info_dict = self.__bring_playlist_json(
-                pl_url, videos.update_playlist_data)
-            videos.playlist_info_dict = pl_info_dict
-            videos.channel_name = pl_info_dict['channel']
-            if not videos.pl_folder_name:  # 임시:이 조건문은 이제 제거해도 됨. 아마? 일단 남기기
-                videos.pl_folder_name = pl_info_dict["title"]
-
-            # 경로 설정도 그냥 여기서? 플리 데이터 쓰는게 많아서서. <- x 인자가 개같이 많아짐
-
-    def _init_videos_data(self):
-        """내부 비디오들 데이터 가져오고 프로그래스 띄우기"""
-        pass
 
     def __bring_playlist_json(self, url: str,
                               #   playlist_data_path: str, channel_data_path: str,
@@ -630,10 +625,11 @@ class VideosManager:
                         )
                     ]
 
-        for temp_folder in os.listdir(self.temp_path):
-            dir_path = f"{self.temp_path}\\{temp_folder}"
-            if os.path.isdir(dir_path) and not os.listdir(dir_path):
-                os.rmdir(dir_path)
+        # 이제 통합이니까 지우면 안됨
+        # for temp_folder in os.listdir(self._temp_path):
+        #     dir_path = f"{self._temp_path}\\{temp_folder}"
+        #     if os.path.isdir(dir_path) and not os.listdir(dir_path):
+        #         os.rmdir(dir_path)
 
         return error_codes
 

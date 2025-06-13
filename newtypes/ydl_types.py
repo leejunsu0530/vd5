@@ -43,6 +43,7 @@ class EntryInPlaylist(TypedDict, total=False):  # 플리 내 간단한 개별 �
     live_status: LiveStatus | None
     old_title: str
     playlist: str
+    playlist_count: int  # 일단 여기만 추가하고 밑에도 필요할진 모름
 
 
 class PlaylistInfoDict(TypedDict, total=False):  # 타입힌트 할때 굳이 Playlist|Channel로 할 필요x

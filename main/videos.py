@@ -53,14 +53,14 @@ class Videos:
 
         """
         # 메니져가 정의해주는 변수
-        self.playlist_info_dict: ChannelInfoDict | PlaylistInfoDict | None = None
+        self.playlist_info_dict: ChannelInfoDict | PlaylistInfoDict = {}
         self.down_archive_path = ""
         self.channel_name = ""
         self.video_path = ""
         self.thumbnail_path = ""
         self.error_path = ""
         self.temp_path = ""
-        self.custom_da_path = ""
+        # self.custom_da_path = ""
 
         def check_is_repeated(video_dict: VideoInfoDict) -> bool:
             # 기존은 list_not_repeated 정의하고 for문 돌면서 넣은 뒤 이 리스트에 있으면 중복에 넣고 이 리스트로 다운 가능/불가능 정했었음.
