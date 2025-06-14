@@ -193,10 +193,10 @@ class VideosManager:
 
         return new_videos_init
 
-    def _init_videos_data(self, playlist_videos_init: list[Videos],
+    def _init_videos_data(self, new_playlist_videos_init: list[Videos],
                           video_force_update: bool | Literal["just_bring"]) -> None:
         """내부 비디오들 데이터 가져오고 프로그래스 띄우기. 기존 비디오스면 패스"""
-        for videos in playlist_videos_init:
+        for videos in new_playlist_videos_init:
             #  그후에 세부 영상 추출. 이미 존재하는 비디오스면 세부 영상 추출x
             # 채널 정보 가져와서 영상 목록 뽑아내기
             playlist_info_dict = videos.playlist_info_dict
@@ -236,7 +236,9 @@ class VideosManager:
                         video_force_update)
                     + cannot_download
                 )
-
+    def _set_style(self):
+        pass
+    
     def __bring_playlist_json(self, url: str,
                               #   playlist_data_path: str, channel_data_path: str,
                               update: bool = True, called_from_thumbnail: bool = False) -> ChannelInfoDict | PlaylistInfoDict:

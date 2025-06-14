@@ -16,6 +16,7 @@ from ..newtypes.dict_list import (
 from ..newtypes.dict_formatting import dict_formatting
 from ..newtypes.ydl_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, VideoInfoDict, EntryInPlaylist
 from ..richtext.rich_vd4 import make_info_table, Table, my_console, path_styler
+from ..ydl.da_manager import DownArchive
 
 CODE_FILE_PATH = bring_file_name_no_ext()
 
@@ -26,14 +27,12 @@ class Videos:
         playlist_url: str,
         video_bring_restrict: Callable[[EntryInPlaylist], bool] = None,
         playlist_title: str = "",
-        inner_folder_split: (
-            Literal["%(upload_date>%Y.%m)s",
-                    "%(uploader)s", "%(playlist)s"] | str
-        ) = "",
+        inner_folder_split: Literal["%(upload_date>%Y.%m)s",
+                                    "%(uploader)s", "%(playlist)s"] | str = "",
         styles: list[Style | str] | Style | str | None = None,
         split_chapter: bool = False,
         update_playlist_data: bool = True,
-        custom_da: bool = False,
+        # custom_da: bool = False,
         artist_name: str = "",
         album_title: str = "",
     ):
@@ -54,13 +53,12 @@ class Videos:
         """
         # 메니져가 정의해주는 변수
         self.playlist_info_dict: ChannelInfoDict | PlaylistInfoDict = {}
-        self.down_archive_path = ""
+        self.down_archive:DownArchive = DownArchive()
         self.channel_name = ""
         self.video_path = ""
         self.thumbnail_path = ""
         self.error_path = ""
         self.temp_path = ""
-        # self.custom_da_path = ""
 
         def check_is_repeated(video_dict: VideoInfoDict) -> bool:
             # 기존은 list_not_repeated 정의하고 for문 돌면서 넣은 뒤 이 리스트에 있으면 중복에 넣고 이 리스트로 다운 가능/불가능 정했었음.
@@ -73,7 +71,7 @@ class Videos:
             "repeated": check_is_repeated,  # 중복 분류는 구현이 어려움. 중복 확인만 하기
             "is_downloaded": lambda video_dict: (
                 True if video_dict.get(
-                    "id") in self._bring_da_list() else False
+                    "id") in self.down_archive.bring_da_list() else False
             ),
         }
 
@@ -85,7 +83,6 @@ class Videos:
         self.update_playlist_data = update_playlist_data
         self.inner_split_by = inner_folder_split
         self.split_chapter = split_chapter
-        self.custom_da = custom_da
         self.artist = artist_name
         self.album = album_title
 
@@ -109,8 +106,6 @@ class Videos:
                 self.styles = [styles, Style(dim=True) + Style.parse(styles)]
 
         self.style: Style | str = self.styles[0] if self.styles else "none"
-
-        self.down_archive_name: str = f"{self.pl_folder_name}.archive"
 
     def change_value(
         self,
@@ -360,28 +355,6 @@ class Videos:
 
         return new_videos_to_return
 
-    def _bring_da_list(self) -> list[str]:
-        """파일 읽어오기,, 딕셔너리에 is_da넣기,
-        비디오스의 da 이름이 custom이면 경로를 커스텀 경로로, 이름을 업로더_파일명.archive로"""
-        if (
-            self.down_archive_name == "custom"
-            or self.down_archive_name is None
-            or self.custom_da
-        ):
-            self.down_archive_path = self.custom_da_path
-            self.down_archive_name = f"{self.channel_name}_{CODE_FILE_PATH}.archive"
-
-        down_archive = read_str_from_file(
-            f"{self.down_archive_path}\\{self.down_archive_name}"
-        )
-        dl_id_list = (
-            [line.split()[1] for line in down_archive.split("\n") if line]
-            if down_archive
-            else []
-        )
-        # if 안붙이면 마지막줄에 공백에서 오류
-
-        return dl_id_list
 
     def show_table(
         self,
