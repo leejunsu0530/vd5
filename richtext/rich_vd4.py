@@ -8,7 +8,7 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.progress import Progress
 
-from ..newtypes.format_str_tools import (
+from ..newtypes.formatstr import (
     format_number,
     format_date,
     format_byte_str,

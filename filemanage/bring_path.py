@@ -19,6 +19,9 @@ def bring_file_name_no_ext():
     return file_lst[0]
 
 
+CODE_FILE_PATH = bring_file_name_no_ext()
+
+
 if __name__ == '__main__':
     print(bring_file_path())
     print(bring_file_name())

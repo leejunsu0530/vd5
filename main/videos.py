@@ -1,27 +1,168 @@
 from typing import Callable, Literal, Any
+from abc import ABC, abstractmethod
+import json
 from copy import deepcopy
 from rich.style import Style
 from rich.panel import Panel
 
 from ..filemanage.filesave import read_str_from_file
-from ..filemanage.bring_path import bring_file_name_no_ext
-from ..newtypes.format_str_tools import format_byte_str, format_date
+from ..filemanage.bring_path import CODE_FILE_PATH
+from ..newtypes.formatstr import FormatStr
 from ..newtypes.new_sum import new_sum
-from ..newtypes.dict_list import (
-    bring_key_list,
-    dict_set_inter,
-    dict_set_diff,
-    dict_set_union,
-)
+
 from ..newtypes.dict_formatting import dict_formatting
 from ..newtypes.ydl_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, VideoInfoDict, EntryInPlaylist
 from ..richtext.rich_vd4 import make_info_table, Table, my_console, path_styler
-from ..ydl.da_manager import DownArchive
-
-CODE_FILE_PATH = bring_file_name_no_ext()
 
 
-class Videos:
+def bring_key_list(lst: list[dict], key: str) -> list:
+    # 얘는 아래에 통합x (기능이 다르니까)
+    return [dict_.get(key) for dict_ in lst]
+
+
+class DictSetOperator:
+    @staticmethod
+    def union(list1: list[VideoInfoDict | EntryInPlaylist], list2: list[VideoInfoDict | EntryInPlaylist]) -> list[VideoInfoDict | EntryInPlaylist]:
+        """합집합"""
+        set1 = {json.dumps(item, sort_keys=True) for item in list1}
+        set2 = {json.dumps(item, sort_keys=True) for item in list2}
+
+        # 집합 연산 수행
+        sum_json = set1 | set2
+
+        # JSON 문자열을 다시 딕셔너리로 변환
+        sum_ = [json.loads(item) for item in sum_json]
+
+        return sum_
+
+    @staticmethod
+    def diff(list1: list[VideoInfoDict | EntryInPlaylist], list2: list[VideoInfoDict | EntryInPlaylist]) -> list[VideoInfoDict | EntryInPlaylist]:
+        """차집합"""
+        set1 = {json.dumps(item, sort_keys=True) for item in list1}
+        set2 = {json.dumps(item, sort_keys=True) for item in list2}
+
+        # 집합 연산 수행
+        diff_json = set1 - set2
+
+        # JSON 문자열을 다시 딕셔너리로 변환
+        difference = [json.loads(item) for item in diff_json]
+
+        return difference
+
+    @staticmethod
+    def inter(list1: list[VideoInfoDict | EntryInPlaylist], list2: list[VideoInfoDict | EntryInPlaylist]) -> list[VideoInfoDict | EntryInPlaylist]:
+        """교집합"""
+        set1 = {json.dumps(item, sort_keys=True) for item in list1}
+        set2 = {json.dumps(item, sort_keys=True) for item in list2}
+
+        # 집합 연산 수행
+        inter_json = set1 & set2
+
+        # JSON 문자열을 다시 딕셔너리로 변환
+        intersection = [json.loads(item) for item in inter_json]
+
+        return intersection
+
+
+class VideoListManageMixin:  # 이건 일단 추상화할 필요 x
+    # list_all_videos를 관리하고 분류함. 리스트들 정의는 여기서 안하고 자식에서.
+    def update(self):
+        pass
+
+    def sort(self):
+        pass  # 이걸 여기서 하나 아니면 메인에 정의된 거 끌어다 쓰나?
+
+    def calculate_table_info(self):
+        pass  # 정보 딕셔너리로 반환하는 함수
+
+    def format_table_info(self):
+        pass  # 딕셔너리로 받은 정보 rich 형식으로 색 입혀서 내보내는 함수
+
+
+class DictListCalculateMixin(ABC):
+    # 추상화하는 이유는 딕셔너리 든 리스트가 자식에서
+    # 기본 객체로 정의되지 않고 위의 관리에서 정의될 수 있어서. 추상화 필요없으면 제거할 수도 있음
+    @property
+    @abstractmethod
+    def list_all_videos(self) -> list[dict]:
+        ...
+
+    @list_all_videos.setter
+    @abstractmethod
+    def list_all_videos(self, value: list[dict]):
+        ...
+
+    @abstractmethod
+    def update(self) -> "DictListCalculateMixin":
+        ...
+
+    @abstractmethod
+    def override_list(self, other: "DictListCalculateMixin") -> "DictListCalculateMixin":
+        ...
+
+    # 이제 이 아래에 cut, 필터링, 사칙연산 끌고 와야 하는데, 일단 밑에 정리 좀 하고
+
+
+class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
+    # 기본 표 키 정의
+    default_keys_to_show: list[str | tuple[str, Callable[[str | int | float], str]]] = [
+        "title",
+        ("upload_date", FormatStr.date),
+        ("view_count", FormatStr.number),
+        ("like_count", FormatStr.number),
+        ("duration", format_time),
+        ("filesize_approx", format_byte_str),
+    ]
+
+    @property
+    @abstractmethod
+    def videos_list(self) -> list[VideoInfoDict | EntryInPlaylist]:
+        pass  # 비디오스 리스트 넣기.
+
+    def make_table(self, table: Table, videos: "Videos") -> None:
+        pass
+
+    def print_table(self):
+        """테이블을 만드는 건 여기서."""
+        table = Table()  # 이거 리스트처럼 저기서 변경한게 자동으로 반영되나?
+        for videos in self.videos_list:
+            self.make_table(table, videos)
+        my_console.print(table)
+
+
+class Videos(VideoListManageMixin, DictListCalculateMixin, VideosTableMixin):
+    """메인에서 업데이트 호출 > 
+    메인 내에서 컬러랑 da 먼저 직접 호출 > 
+    비디오스 분류에서 자체 정의 업데이트로 업데이트하고 super 호출 > 
+    사칙연산에서 업데이트하고 super 호출 안함.
+    """
+    class Colors:
+        pass
+
+    class DownArchive:
+        def __init__(self, dir_: str = "", name: str = "") -> None:
+            self.down_archive_dir = dir_
+            self.down_archive_name = name
+
+        def inherit_other_da(self):
+            pass
+
+        def bring_id_list(self) -> list[str]:
+            """파일 읽어오기,, 딕셔너리에 is_da넣기"""
+            down_archive = read_str_from_file(
+                f"{self.down_archive_dir}\\{self.down_archive_name}")
+            if down_archive:  # if 안붙이면 마지막줄에 공백에서 오류
+                return [line.split()[1] for line in down_archive.split("\n") if line]
+            else:
+                return []
+
+        def check_is_downloaded(self, id_to_check: str):
+            pass
+
+        def del_(self, id_: str):  # 이건 만드려면 da 재작성도 정의 필요
+            pass
+        # 무결성은 과하다 싶은데, 할일도 많고 멍청하게 다 지워버리지 않는 한 의미도 적음
+
     def __init__(
         self,
         playlist_url: str,
@@ -53,7 +194,7 @@ class Videos:
         """
         # 메니져가 정의해주는 변수
         self.playlist_info_dict: ChannelInfoDict | PlaylistInfoDict = {}
-        self.down_archive:DownArchive = DownArchive()
+        self.down_archive = self.DownArchive()
         self.channel_name = ""
         self.video_path = ""
         self.thumbnail_path = ""
@@ -212,25 +353,6 @@ class Videos:
             my_console.print(info, highlight=False)
         return info
 
-    def head(self, len_: int = 5, print_: bool = True) -> Table:
-        self.update()
-        table = make_info_table(
-            video_list=self.list_all_videos[:len_],
-            keys_to_show=[
-                "title", ("upload_date", format_date), "duration_string"],
-            title=self.pl_folder_name,
-            caption=None,
-            style=self.style,
-            row_style=self.styles[:3],
-            print_=print_,
-            print_title_and_caption=True,
-            show_lines=False,
-            show_edges=False,
-            restrict=None,
-            sort_by=self.sort_by,
-        )
-        return table
-
     def bring_list_from_key(
         self, key: MAJOR_KEYS
     ) -> list[int | str | float | list | dict]:
@@ -355,7 +477,6 @@ class Videos:
 
         return new_videos_to_return
 
-
     def show_table(
         self,
         keys_to_show: list[
@@ -430,7 +551,7 @@ class Videos:
         # 이건 따로 역방향 연산을 정의하지 않으면 a+b는 a에서, b+a는 b에서 처리됨
         # __iadd__는 +=연산으로, 이거 하면 새 객체 반환임.
         new_videos = deepcopy(self)
-        new_videos.list_all_videos = dict_set_union(
+        new_videos.list_all_videos = DictSetOperator.union(
             new_videos.list_all_videos, other.list_all_videos
         )
         new_videos.update()
@@ -438,7 +559,7 @@ class Videos:
 
     def __sub__(self, other: "Videos") -> "Videos":
         new_videos = deepcopy(self)
-        new_videos.list_all_videos = dict_set_diff(
+        new_videos.list_all_videos = DictSetOperator.diff(
             new_videos.list_all_videos, other.list_all_videos
         )
         new_videos.update()
@@ -447,14 +568,8 @@ class Videos:
     def __and__(self, other: "Videos") -> "Videos":
         """교집합: &메소드 사용"""
         new_videos = deepcopy(self)
-        new_videos.list_all_videos = dict_set_inter(
+        new_videos.list_all_videos = DictSetOperator.inter(
             new_videos.list_all_videos, other.list_all_videos
         )
         new_videos.update()
         return new_videos
-
-    def __str__(self) -> Panel:
-        return self.info(False)
-
-    def __repr__(self) -> Panel:
-        return self.info(False)

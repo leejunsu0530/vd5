@@ -1,5 +1,5 @@
 import re
-from ..newtypes.format_str_tools import format_time, format_filename
+from ..newtypes.formatstr import format_time, format_filename
 
 # 시간 형식을 위한 패턴 (hh:mm:ss, h:mm:ss 또는 mm:ss)
 TIME_PATTERN = r"(?:\d{1,2}[:.])?\d{1,2}[:.]\d{2}"

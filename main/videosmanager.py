@@ -32,7 +32,7 @@ from ..ydl.extcolors_from_thumbnail import (
     download_thumbnail,
     bring_major_colors,
 )
-from ..newtypes.format_str_tools import format_byte_str
+from ..newtypes.formatstr import format_byte_str
 
 from ..richtext.rich_vd4 import (
     my_console,

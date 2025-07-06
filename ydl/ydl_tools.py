@@ -3,7 +3,7 @@ import traceback
 from typing import Callable, Any, Literal
 import yt_dlp  # type: ignore
 
-from ..newtypes.format_str_tools import format_filename
+from ..newtypes.formatstr import format_filename
 from ..newtypes.ydl_types import VideoInfoDict, PlaylistInfoDict, ChannelInfoDict, EntryInPlaylist
 
 from .timestamp_parser import parse_chapters
