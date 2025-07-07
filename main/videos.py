@@ -7,12 +7,12 @@ from rich.panel import Panel
 
 from ..filemanage.filesave import read_str_from_file
 from ..filemanage.bring_path import CODE_FILE_PATH
-from ..newtypes.formatstr import FormatStr
+from ..newtypes.formatstr import FormatStr, dict_formatting
 from ..newtypes.new_sum import new_sum
 
-from ..newtypes.dict_formatting import dict_formatting
 from ..newtypes.ydl_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, VideoInfoDict, EntryInPlaylist
-from ..richtext.rich_vd4 import make_info_table, Table, my_console, path_styler
+from ..richtext.loggers import Table, path_styler
+from ..richtext.my_console import my_console
 
 
 def bring_key_list(lst: list[dict], key: str) -> list:
@@ -105,13 +105,13 @@ class DictListCalculateMixin(ABC):
 
 class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
     # 기본 표 키 정의
-    default_keys_to_show: list[str | tuple[str, Callable[[str | int | float], str]]] = [
+    default_keys_to_show: list[str | tuple[str, Callable[[Any], str]]] = [
         "title",
         ("upload_date", FormatStr.date),
         ("view_count", FormatStr.number),
         ("like_count", FormatStr.number),
-        ("duration", format_time),
-        ("filesize_approx", format_byte_str),
+        ("duration", FormatStr.time),
+        ("filesize_approx", FormatStr.bytes),
     ]
 
     @property

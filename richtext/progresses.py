@@ -7,7 +7,10 @@ from rich.progress import (
     MofNCompleteColumn,
     SpinnerColumn,
 )
-from .rich_vd4 import my_console
+from .my_console import my_console
+
+
+"""파일명은 그대로 두고, 여기서 더블 프로그래스 만들거임"""
 
 
 def progress_video_info() -> Progress:

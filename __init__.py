@@ -3,8 +3,8 @@ from .modulemanage.module_update import check_and_update
 # ------------------------------
 from .main.videosmanager import VideosManager
 from .main.videos import Videos
-from .richtext.rich_vd4 import my_console as con
-from .main import formatstr
+from .richtext.my_console import my_console as con
+from .newtypes.formatstr import FormatStr
 
 from .richtext import ask_prompt as ask
 from .richtext.read_script import print_code
@@ -21,6 +21,6 @@ if not version_info >= (3, 11):
 # yt-dlp 확인
 check_and_update('yt-dlp', "ask")
 
-__all__ = ["VideosManager", "Videos", "con", "formatstr", "ask", "print_code", "new_sum", "Text", "Style"]
+__all__ = ["VideosManager", "Videos", "con", "FormatStr", "ask", "print_code", "new_sum", "Text", "Style"]
 
 __version__ = "1.0.0.post2"

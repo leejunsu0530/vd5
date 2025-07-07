@@ -34,15 +34,16 @@ from ..ydl.extcolors_from_thumbnail import (
 )
 from ..newtypes.formatstr import format_byte_str
 
-from ..richtext.rich_vd4 import (
-    my_console,
+from ..richtext.loggers import (
+
     LoggerForRich,
 
     default_keys_to_show,
     make_info_table,
     group_text_and_progress,
 )
-from ..richtext.return_progress import (
+from ..richtext.my_console import my_console
+from ..richtext.progresses import (
     progress_video_info,
     progress_playlist_data
 )
@@ -157,7 +158,7 @@ class VideosManager:
 
         # 왜 이전에 딥카피였는지 모르겠는데 불안하니까
         self.videos_list = deepcopy(new_playlist_videos_init)
-        self.videos_to_download_list = self.videos_list  
+        self.videos_to_download_list = self.videos_list
         write_dict_to_json(
             self.channel_style_dict_name,
             self.channel_style_dict,
@@ -236,9 +237,10 @@ class VideosManager:
                         video_force_update)
                     + cannot_download
                 )
+
     def _set_style(self):
         pass
-    
+
     def __bring_playlist_json(self, url: str,
                               #   playlist_data_path: str, channel_data_path: str,
                               update: bool = True, called_from_thumbnail: bool = False) -> ChannelInfoDict | PlaylistInfoDict:

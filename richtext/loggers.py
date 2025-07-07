@@ -1,6 +1,6 @@
 from typing import Callable, Any, Literal
 
-from rich.console import Console, Group
+from rich.console import Group
 from rich.table import Table, Column
 from rich import box
 from rich.style import Style
@@ -8,15 +8,7 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.progress import Progress
 
-from ..newtypes.formatstr import (
-    format_number,
-    format_date,
-    format_byte_str,
-    format_time,
-)
-
-# 여기서만 만들어짐
-my_console = Console()
+from .my_console import my_console
 
 
 def path_styler(path: str) -> str:
@@ -121,97 +113,6 @@ class LoggerForRich:
     def error(self, msg):
         msg = Text.from_ansi(msg)
         self.console.print(msg, style="bright_red")
-
-
-default_keys_to_show: list[str | tuple[str, Callable[[str | int | float], str]]] = [
-    "title",
-    ("upload_date", format_date),
-    ("view_count", format_number),
-    ("like_count", format_number),
-    ("duration", format_time),
-    ("filesize_approx", format_byte_str),
-]
-
-
-def make_info_table(
-    *,
-    video_list: list[dict],
-    keys_to_show: list[str | tuple[str,
-                                   Callable[[str | int | float], str]]] = None,
-    title: str | None = None,
-    caption: str | None = None,
-    style: str | Style = "none",
-    row_style: list[str | Style] = None,
-    print_: bool = True,
-    print_title_and_caption: bool = True,
-    show_lines: bool = True,
-    show_edges: bool = True,
-    restrict: Callable[[dict], bool] = None,
-    sort_by: tuple[str, bool] = None,
-) -> Table:
-    if not keys_to_show:
-        keys_to_show = default_keys_to_show
-    new_keys_to_show: list[tuple[str, Callable[[Any], str]]] = [
-        (key, lambda x: x) if isinstance(key, str) else key for key in keys_to_show]
-
-    if sort_by:
-        key_names = []
-        for key, _ in new_keys_to_show:
-            if key != sort_by[0]:
-                key_names.append(key)
-            elif sort_by[1] is False:  # 오름차순, 기본값
-                key_names.append(f"[bold bright_magenta]{key}▼[/]")
-            else:  # 내림차순, 뒤집음
-                key_names.append(f"[bold bright_magenta]{key}▲[/]")
-        # key_names: list[str] = [key if not key == sort_by[0] else f"[bold bright_magenta]{key}▲[/]" if not sort_by[1] else f"[bold bright_magenta]{key}▼[/]" for key, _ in new_keys_to_show]
-    else:  # sort_by 없으면
-        key_names = [key for key, _ in new_keys_to_show]
-
-    headers = [Column(header="index", min_width=4)] + [
-        Column(header=key, min_width=11) for key in key_names
-    ]
-    table = Table(
-        *headers,
-        title=title if print_title_and_caption else None,
-        caption=caption if print_title_and_caption else None,
-        box=box.HORIZONTALS,
-        show_lines=show_lines,
-        show_edge=show_edges,
-        style=style,
-        title_style=style,
-        caption_style=style,
-    )
-
-    if not restrict:
-        def restrict(dict_):
-            return bool(dict_)
-
-    if not row_style:
-        row_style = ["none", "dim"]
-
-    new_row_style: list[Style] = [style if isinstance(style, Style) else Style.parse(
-        style) for style in row_style]
-
-    for idx, video in enumerate(video_list):
-        lst = [idx + 1] + [func(video.get(key, "N/A"))
-                           for key, func in new_keys_to_show if restrict(video)]
-        new_lst: list[str] = list(map(str, lst))
-
-        each_row_style = new_row_style[idx % len(new_row_style)]
-        # 다운된거면 초록으로. 맴버십 전용일 때도 처리해야 함
-        if video.get("availability") != "public":
-            each_row_style += Style(bgcolor="red", strike=True)
-        elif video.get("repeated"):
-            each_row_style += Style(bgcolor="yellow")
-        elif video.get("is_downloaded"):  # 퍼블릭이고 다운됐으면
-            each_row_style += Style(bgcolor="green")
-
-        table.add_row(
-            *new_lst, style=each_row_style
-        )  # 언페킹해서 *args에 리스트의 요소를 전달
-    if print_:
-        my_console.print(table)
-    return table
 
 
 if __name__ == "__main__":
