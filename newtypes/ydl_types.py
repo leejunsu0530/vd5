@@ -114,6 +114,8 @@ class VideoInfoDict(TypedDict, total=False):
     playlist: str
     playlist_uploader: str
     purl: str
+    is_downloaded: bool
+    is_repeated: bool  # 이거 말고 더 있었던가
 
 
 class Comment(TypedDict, total=False):

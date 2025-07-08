@@ -1,14 +1,18 @@
-from typing import Callable, Literal, Any
+from typing import Callable, Literal, Any, Self, cast
+from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 import json
+from collections import Counter
 from copy import deepcopy
 from rich.style import Style
+from rich.text import Text
 from rich.panel import Panel
+from rich.table import Table, Column
+from rich import box
 
 from ..filemanage.filesave import read_str_from_file
 from ..filemanage.bring_path import CODE_FILE_PATH
 from ..newtypes.formatstr import FormatStr, dict_formatting
-from ..newtypes.new_sum import new_sum
 
 from ..newtypes.ydl_types import MAJOR_KEYS, ChannelInfoDict, PlaylistInfoDict, VideoInfoDict, EntryInPlaylist
 from ..richtext.loggers import Table, path_styler
@@ -21,6 +25,7 @@ def bring_key_list(lst: list[dict], key: str) -> list:
 
 
 class DictSetOperator:
+    """여차하면 이거 내부 클래스로 통합할 수도?"""
     @staticmethod
     def union(list1: list[VideoInfoDict | EntryInPlaylist], list2: list[VideoInfoDict | EntryInPlaylist]) -> list[VideoInfoDict | EntryInPlaylist]:
         """합집합"""
@@ -64,80 +69,221 @@ class DictSetOperator:
         return intersection
 
 
-class VideoListManageMixin:  # 이건 일단 추상화할 필요 x
-    # list_all_videos를 관리하고 분류함. 리스트들 정의는 여기서 안하고 자식에서.
+class VideoListsManageMixin:  # 이건 일단 추상화할 필요 x
+    """list_all_videos를 관리하고 다른 리스트들로 분류함. 리스트들 정의는 여기서 안하고 자식에서."""
+
+    def _check_attr(self):
+        """속성들이 메인에 정의되어 있는지 검사하는 메서드"""
+
     def update(self):
-        pass
-
-    def sort(self):
-        pass  # 이걸 여기서 하나 아니면 메인에 정의된 거 끌어다 쓰나?
-
-    def calculate_table_info(self):
-        pass  # 정보 딕셔너리로 반환하는 함수
-
-    def format_table_info(self):
-        pass  # 딕셔너리로 받은 정보 rich 형식으로 색 입혀서 내보내는 함수
+        # 자신만의 업데이트 동작을 한 후 체인에 연결된 다음 믹스인의 업데이트 실행
+        if hasattr(super(), "update"):
+            super().update()
 
 
-class DictListCalculateMixin(ABC):
-    # 추상화하는 이유는 딕셔너리 든 리스트가 자식에서
-    # 기본 객체로 정의되지 않고 위의 관리에서 정의될 수 있어서. 추상화 필요없으면 제거할 수도 있음
-    @property
-    @abstractmethod
-    def list_all_videos(self) -> list[dict]:
-        ...
+class DictListTransformMixin:
+    """자르기, 필터링, 사칙연산은 아예 원본과 다른 정보의 객체를 만들어냄. sort는 여기서 정의 안하고, 이 위 믹스인에서 할지 메인에서 할지 고민중"""
 
-    @list_all_videos.setter
-    @abstractmethod
-    def list_all_videos(self, value: list[dict]):
-        ...
-
-    @abstractmethod
-    def update(self) -> "DictListCalculateMixin":
-        ...
-
-    @abstractmethod
-    def override_list(self, other: "DictListCalculateMixin") -> "DictListCalculateMixin":
-        ...
+    def update(self):
+        # 자신만의 업데이트 동작을 한 후 체인에 연결된 다음 믹스인의 업데이트 실행
+        if hasattr(super(), "update"):
+            super().update()
 
     # 이제 이 아래에 cut, 필터링, 사칙연산 끌고 와야 하는데, 일단 밑에 정리 좀 하고
 
 
+@dataclass
+class TableKey:
+    """표에 사용되는 구체적인 키 설정. alias는 생성하지 않았을 시 자동으로 key로 설정"""
+    key: str
+    alias: str = ""
+
+    @staticmethod
+    def return_str(value) -> str:
+        return str(value)
+    # 람다 경고 회피. 그리고 직접 정의보다 이게 더 직관적인듯?
+    # gpt는 그냥 str(함수니까) 쓰면 된다 하는데, 나중에 내가 햇갈릴거 같아서
+    formatter: Callable[..., str] = return_str
+    formatter_kwargs: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if self.alias == "":
+            self.alias = self.key
+
+
 class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
     # 기본 표 키 정의
-    default_keys_to_show: list[str | tuple[str, Callable[[Any], str]]] = [
-        "title",
-        ("upload_date", FormatStr.date),
-        ("view_count", FormatStr.number),
-        ("like_count", FormatStr.number),
-        ("duration", FormatStr.time),
-        ("filesize_approx", FormatStr.bytes),
-    ]
+    default_keys_to_show: tuple[TableKey, ...] = (
+        TableKey("title"),
+        TableKey("upload_date", formatter=FormatStr.date),
+        TableKey("view_count", formatter=FormatStr.number),
+        TableKey("like_count", formatter=FormatStr.number),
+        TableKey("duration", formatter=FormatStr.time),
+        TableKey("filesize_approx", formatter=FormatStr.bytes)
+    )
 
     @property
     @abstractmethod
-    def videos_list(self) -> list[VideoInfoDict | EntryInPlaylist]:
-        pass  # 비디오스 리스트 넣기.
+    def videos_list(self) -> list["Videos"]:
+        """return [self]같은 식으로 재정의"""
 
-    def make_table(self, table: Table, videos: "Videos") -> None:
-        pass
+    def print_table(self,
+                    # 함수에 인자로 kwargs 들어가서 Callable[Any로는 안됨]
+                    *keys: str | tuple[str, Callable[[Any], str]] | TableKey,
+                    restrict: Callable[[VideoInfoDict |
+                                        EntryInPlaylist], bool] = None,  # 이걸 여기서 적용한 후 그 적용된 딕셔너리 리스트를 제공하는 게 낫겠지. 팔요시 위쪽 계산 함수들도 여기로 이관
+                    box_: box.Box | None = box.HEAVY_HEAD,
+                    show_lines: bool = False,
+                    skow_edge: bool = True,
+                    expand: bool = False,
+                    no_wrap: bool = False,
+                    highlight: bool = False
+                    ) -> None:
+        """
+        테이블을 만드는 건 여기서.
 
-    def print_table(self):
-        """테이블을 만드는 건 여기서."""
-        table = Table()  # 이거 리스트처럼 저기서 변경한게 자동으로 반영되나?
+        Args:
+            keys: 아래의 형태 중 하나가 들어갈 수 있음
+                - 딕셔너리의 키가 되는 문자열
+                - (키, 포메팅 함수) 형태의 튜플 (※함수는 하나의 인자만 가능)
+                - TableKey 객체. 키, 표시할 키의 이름, 포메팅 함수, 포메팅 함수에 전달할 인자를 설정 가능
+
+        """
+        new_keys: list[TableKey] = []
+        for key in keys:
+            if isinstance(key, str):
+                new_keys.append(TableKey(key))
+            elif isinstance(key, tuple):
+                k, formatter = key
+                new_keys.append(TableKey(k, formatter=formatter))
+            elif isinstance(key, TableKey):
+                new_keys.append(key)
+            else:
+                raise TypeError(f"지원하지 않는 키 형식({type(k)})입니다: {k}")
+
+        # 각 요소에 대한 정보를 지닌 리스트
+        _columns_str: list[str] = ["index"] + [tk.alias for tk in new_keys]
+        columns: list[Column] = [
+            Column("index", max_width=5, no_wrap=no_wrap)] + [Column(tk.alias, no_wrap=no_wrap) for tk in new_keys]  # 전과는 달리 뒤쪽은 max 지정 안함. 일단은
+        # columns에서 일반 색/어두운 색으로 구체화 << 이거 보기에 안좋아서 그냥 box.HEAVY_HEAD로 줄 나눔
+
+        # 만약 비디오스에서 호출한거면 정렬순으로 강조
+        if len(self.videos_list) == 1:
+            sort_key, sort_reverse = self.videos_list[0].sort_by
+            if sort_key in columns:
+                idx = _columns_str.index(sort_key)
+                arrow = "▼" if sort_reverse else "▲"
+                columns[idx] = Column(
+                    f"[bold bright_magenta]{columns[idx]}{arrow}[/]")
+
+            # 일단 pl_folder_name을 사용하는 쪽으로 지정.
+            title = f"{self.videos_list[0].pl_folder_name} Table"
+        else:
+            title = "Total Table"
+
+        # 캡션 달기
+        caption = ""
+        table_infos: list[dict] = []
         for videos in self.videos_list:
-            self.make_table(table, videos)
+            caption += f"{videos.format_table_info()}\n"  # 색은 저쪽에서 자동으로 입혀줌
+            table_infos.append(videos.calculate_table_info())
+        total_table_info = dict(sum((Counter(i)
+                                for i in table_infos), Counter()))
+        caption += self.format_table_info(
+            total_table_info)
+
+        table = Table(
+            *columns,
+            title=title,
+            caption=caption,
+            box=box_,
+            show_lines=show_lines,
+            show_edge=skow_edge,
+            expand=expand,
+            highlight=highlight,
+        )
+
+        index = [0]
+        if restrict is None:
+            def restrict(d) -> Literal[True]:  # pylint: disable=unused-argument
+                return True
+        row_styles: list[Style] = []
+        for videos in self.videos_list:
+            info_dict_list = [
+                video_dict for video_dict in videos.list_all_videos if restrict(video_dict)]
+            self._make_table(table, info_dict_list,
+                             videos.colors, new_keys, index, row_styles)
+
+        table.row_styles = row_styles
         my_console.print(table)
 
+    def _make_table(self, table: Table,
+                    info_dict_list: list[EntryInPlaylist | VideoInfoDict],
+                    colors: "Videos._Colors",
+                    keys: list[TableKey],
+                    latest_idx: list[int],
+                    row_styles: list[Style]) -> None:
+        """색을 입혀서 열을 지정. 캡션은 밖에서 처리. idx는 밖에서 받아오기"""
+        # 색은 직접 글씨에 입힘. 배경에도 색 입혀야 함 << 끊기거나 덮일까봐, 그냥 밖에서 리스트 두고 스타일을 하나씩 넣은 뒤 나중에 row_styles에 반영
+        for video_dict in info_dict_list:  # 각 비디오 딕셔너리마다
+            row_style = next(colors)
+            row: list[Any] = latest_idx[:]
+            for k in keys:
+                row.append(k.formatter(video_dict.get(
+                    k.key), **k.formatter_kwargs))
+            table.add_row(*map(str, row))
+            latest_idx[0] += 1
+            # 배경에 색 입히기
+            if video_dict.get("availability") != "public":
+                row_style += Style(bgcolor="red", strike=True)
+            elif video_dict.get("is_repeated"):
+                row_style += Style(bgcolor="yellow")
+            elif video_dict.get("is_downloaded"):
+                row_style += Style(bgcolor="green")
+            row_styles.append(row_style)
 
-class Videos(VideoListManageMixin, DictListCalculateMixin, VideosTableMixin):
+    def calculate_table_info(self) -> dict:
+        """자신 비디오스의 종류별 영상 갯수 등을 세서 정보를 딕셔너리로 반환하는 함수"""
+        return {}
+
+    def format_table_info(self, table_info: dict = None) -> str:
+        """딕셔너리로 받은 정보에 rich 형식으로 색 입혀서 내보내는 함수. 이 함수의 기능이 필요할 시 table_info에 값을 전달하여 사용"""
+        if table_info is None:
+            table_info = self.calculate_table_info()
+
+        return "test"
+
+
+class Videos(VideoListsManageMixin, DictListTransformMixin, VideosTableMixin):
     """메인에서 업데이트 호출 > 
     메인 내에서 컬러랑 da 먼저 직접 호출 > 
     비디오스 분류에서 자체 정의 업데이트로 업데이트하고 super 호출 > 
     사칙연산에서 업데이트하고 super 호출 안함.
     """
-    class Colors:
-        pass
+    class _Colors:
+        """햇갈리니까 이름을 color로 바꿈. (원랜 style인데). 반복되는 색은 next(객체명)으로 호출"""
+
+        def __init__(self, styles: list[Style | str] | tuple[Style | str, ...] = ("none", "dim")):
+            self._idx: int = 0
+            self.color_list: list[Style] = [s if isinstance(
+                s, Style) else Style.parse(s) for s in styles]
+            self.color: Style = self.color_list[0]
+
+        def update(self):
+            """이번에는 스타일스가 한칸짜리면 그냥 냅두기(dim은 열 표기에 사용됨)"""
+            self.color_list = [s if isinstance(
+                s, Style) else Style.parse(s) for s in self.color_list]
+            self.color = self.color_list[0]
+
+        def __iter__(self) -> Self:
+            return self
+
+        def __next__(self) -> Style:
+            if self._idx >= len(self.color_list):
+                self._idx = 0
+            result = self.color_list[self._idx]
+            self._idx += 1
+            return result
 
     class DownArchive:
         def __init__(self, dir_: str = "", name: str = "") -> None:
@@ -234,9 +380,7 @@ class Videos(VideoListManageMixin, DictListCalculateMixin, VideosTableMixin):
         self.list_repeated: list[VideoInfoDict | EntryInPlaylist] = []  # 중복 id
 
         self.sort_by: tuple[str, bool] = (
-            "upload_date",
-            False,
-        )  # 기본으로 업로드 날짜, 내림차순 정렬
+            "upload_date", False)  # 기본으로 업로드 날짜, 내림차순 정렬
 
         if isinstance(styles, list) or styles is None:
             self.styles: list[str | Style] | None = styles  # none이나 리스트면 그대로
@@ -246,7 +390,8 @@ class Videos(VideoListManageMixin, DictListCalculateMixin, VideosTableMixin):
             else:  # 문자열이면
                 self.styles = [styles, Style(dim=True) + Style.parse(styles)]
 
-        self.style: Style | str = self.styles[0] if self.styles else "none"
+        # self.style: Style | str = self.styles[0] if self.styles else "none"
+        self.colors = self._Colors()
 
     def change_value(
         self,
@@ -529,22 +674,22 @@ class Videos(VideoListManageMixin, DictListCalculateMixin, VideosTableMixin):
         # print_ 안하면 제목도 안나옴
         return table
 
-    def calculate_table_info(self) -> tuple[int, int, int]:
-        """
-        Return:
-            can_dl_len, cannot_dl_len, can_dl_filesize_sum(not formated)
-        """
-        can_dl_len = len(self.list_can_download)
-        cannot_dl_len = len(self.list_cannot_download)
-        can_dl_filesize_sum = sum(
-            [
-                video_dict.get("filesize_approx", 0)
-                for video_dict in self.list_can_download
-                if isinstance(video_dict.get("filesize_approx", 0), int)
-            ]
-        )
-
-        return can_dl_len, cannot_dl_len, can_dl_filesize_sum
+    # def calculate_table_info(self) -> tuple[int, int, int]:
+        # """
+        # Return:
+        # can_dl_len, cannot_dl_len, can_dl_filesize_sum(not formated)
+        # """
+        # can_dl_len = len(self.list_can_download)
+        # cannot_dl_len = len(self.list_cannot_download)
+        # can_dl_filesize_sum = sum(
+        # [
+        # video_dict.get("filesize_approx", 0)
+        # for video_dict in self.list_can_download
+        # if isinstance(video_dict.get("filesize_approx", 0), int)
+        # ]
+        # )
+#
+        # return can_dl_len, cannot_dl_len, can_dl_filesize_sum
 
     # 연산(합,차,교집합)함수: 집합으로 연산한 후 순서 재정렬해야 함. 필터가 클래스를 반환하는지 리스트를 반환하는지에 따라 이거에 클래스를 넣을지 리스트를 넣을지 달라짐.
     def __add__(self, other: "Videos") -> "Videos":
