@@ -1,6 +1,7 @@
 from typing import Callable, Literal, Any, Self, cast
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
+from pathlib import Path
 import json
 from collections import Counter
 from copy import deepcopy
@@ -68,41 +69,41 @@ class DictSetOperator:
 
         return intersection
 
-
-class VideoListsManageMixin:  # 이건 일단 추상화할 필요 x
-    """list_all_videos를 관리하고 다른 리스트들로 분류함. 리스트들 정의는 여기서 안하고 자식에서."""
-
-    def _check_attr(self):
-        """속성들이 메인에 정의되어 있는지 검사하는 메서드"""
-
-    def update(self):
-        # 자신만의 업데이트 동작을 한 후 체인에 연결된 다음 믹스인의 업데이트 실행
-        if hasattr(super(), "update"):
-            super().update()
-
-
-class DictListTransformMixin:
-    """자르기, 필터링, 사칙연산은 아예 원본과 다른 정보의 객체를 만들어냄. sort는 여기서 정의 안하고, 이 위 믹스인에서 할지 메인에서 할지 고민중"""
-
-    def update(self):
-        # 자신만의 업데이트 동작을 한 후 체인에 연결된 다음 믹스인의 업데이트 실행
-        if hasattr(super(), "update"):
-            super().update()
-
-    # 이제 이 아래에 cut, 필터링, 사칙연산 끌고 와야 하는데, 일단 밑에 정리 좀 하고
+# # 정렬 등이 기능이 겹쳐서 여기서 할 까닭이 없음. 그냥 밑에서 업데이트를 잘 나누기
+# class VideoListsManageMixin:  # 이건 일단 추상화할 필요 x
+#     """list_all_videos를 관리하고 다른 리스트들로 분류함. 리스트들 정의는 여기서 안하고 자식에서."""
+#
+#     def _check_attr(self):
+#         """속성들이 메인에 정의되어 있는지 검사하는 메서드"""
+#
+#     def update(self):
+#         # 자신만의 업데이트 동작을 한 후 체인에 연결된 다음 믹스인의 업데이트 실행
+#         if hasattr(super(), "update"):
+#             super().update()
+#
+#
+# class DictListTransformMixin:
+#     """자르기, 필터링, 사칙연산은 아예 원본과 다른 정보의 객체를 만들어냄. sort는 여기서 정의 안하고, 이 위 믹스인에서 할지 메인에서 할지 고민중"""
+#
+#     def update(self): # 정렬, 새 객체의 정보 정리 등
+#         # 자신만의 업데이트 동작을 한 후 체인에 연결된 다음 믹스인의 업데이트 실행
+#         if hasattr(super(), "update"):
+#             super().update()
+#
+#     # 이제 이 아래에 cut, 필터링, 사칙연산 끌고 와야 하는데, 일단 밑에 정리 좀 하고
 
 
 @dataclass
 class TableKey:
     """표에 사용되는 구체적인 키 설정. alias는 생성하지 않았을 시 자동으로 key로 설정"""
-    key: str
-    alias: str = ""
-
     @staticmethod
     def return_str(value) -> str:
+        # 람다 경고 회피. 그리고 직접 정의보다 이게 더 직관적인듯?
+        # gpt는 그냥 str(함수니까) 쓰면 된다 하는데, 나중에 내가 햇갈릴거 같아서
         return str(value)
-    # 람다 경고 회피. 그리고 직접 정의보다 이게 더 직관적인듯?
-    # gpt는 그냥 str(함수니까) 쓰면 된다 하는데, 나중에 내가 햇갈릴거 같아서
+
+    key: str
+    alias: str = ""
     formatter: Callable[..., str] = return_str
     formatter_kwargs: dict[str, Any] = field(default_factory=dict)
 
@@ -147,6 +148,7 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
                 - 딕셔너리의 키가 되는 문자열
                 - (키, 포메팅 함수) 형태의 튜플 (※함수는 하나의 인자만 가능)
                 - TableKey 객체. 키, 표시할 키의 이름, 포메팅 함수, 포메팅 함수에 전달할 인자를 설정 가능
+            restrict: 제한할 조건 
 
         """
         new_keys: list[TableKey] = []
@@ -254,7 +256,7 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
         return "test"
 
 
-class Videos(VideoListsManageMixin, DictListTransformMixin, VideosTableMixin):
+class Videos(VideosTableMixin):
     """메인에서 업데이트 호출 > 
     메인 내에서 컬러랑 da 먼저 직접 호출 > 
     비디오스 분류에서 자체 정의 업데이트로 업데이트하고 super 호출 > 
@@ -285,10 +287,18 @@ class Videos(VideoListsManageMixin, DictListTransformMixin, VideosTableMixin):
             self._idx += 1
             return result
 
-    class DownArchive:
-        def __init__(self, dir_: str = "", name: str = "") -> None:
+    class _VideoList:
+        def __init__(self) -> None:
+            self.all_videos: list[VideoInfoDict | EntryInPlaylist] = []
+            self.can_download: list[VideoInfoDict | EntryInPlaylist] = []
+            self.cannot_download: list[VideoInfoDict | EntryInPlaylist] = []
+            self.downloaded: list[VideoInfoDict | EntryInPlaylist] = []
+            self.repeated: list[VideoInfoDict | EntryInPlaylist] = []
+
+    class _DownArchive:
+        def __init__(self, dir_: str = "", type_: str = "") -> None:
             self.down_archive_dir = dir_
-            self.down_archive_name = name
+            self.down_archive_type = type_
 
         def inherit_other_da(self):
             pass
@@ -296,7 +306,7 @@ class Videos(VideoListsManageMixin, DictListTransformMixin, VideosTableMixin):
         def bring_id_list(self) -> list[str]:
             """파일 읽어오기,, 딕셔너리에 is_da넣기"""
             down_archive = read_str_from_file(
-                f"{self.down_archive_dir}\\{self.down_archive_name}")
+                f"{self.down_archive_dir}\\{self.down_archive_dir}")
             if down_archive:  # if 안붙이면 마지막줄에 공백에서 오류
                 return [line.split()[1] for line in down_archive.split("\n") if line]
             else:
@@ -340,7 +350,7 @@ class Videos(VideoListsManageMixin, DictListTransformMixin, VideosTableMixin):
         """
         # 메니져가 정의해주는 변수
         self.playlist_info_dict: ChannelInfoDict | PlaylistInfoDict = {}
-        self.down_archive = self.DownArchive()
+        self.down_archive = self._DownArchive()
         self.channel_name = ""
         self.video_path = ""
         self.thumbnail_path = ""

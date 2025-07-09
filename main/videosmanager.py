@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Literal, Any, cast
@@ -32,14 +33,10 @@ from ..ydl.extcolors_from_thumbnail import (
     download_thumbnail,
     bring_major_colors,
 )
-from ..newtypes.formatstr import format_byte_str
+from ..newtypes.formatstr import FormatStr
 
 from ..richtext.loggers import (
-
     LoggerForRich,
-
-    default_keys_to_show,
-    make_info_table,
     group_text_and_progress,
 )
 from ..richtext.my_console import my_console
@@ -67,12 +64,12 @@ class VideosManager:
         self,
         *playlist_videos_init: Videos | str,
         parent_videos_dir: str = f"{os.getcwd()}\\downloads",
-        parent_file_dir: str = "",
+        parent_file_dir: str = "{parent_videos_dir}",
         video_save_dir_form: Literal["%(playlist)s", "%(playlist)s (%(channel)s)",
-                                     "%(channel)s/%(playlist)s", ""] | str = "%(playlist)s",
+                                     "%(channel)s/%(playlist)s", "."] | str = "%(playlist)s",
         additional_videos_dict_keys: dict[str,
                                           Callable[[VideoInfoDict], Any]] = None,
-        download_archive_name: Literal["down_archive",
+        download_archive_type: Literal["down_archive",
                                        "%(playlist)s (%(playlist_uploader)s)", "%(channel)s", "FILE_NAME"] | str = 'down_archive',
         video_force_update: bool | Literal["just_bring"] = False,
         default_styles: list[str | Style] = None,
@@ -87,10 +84,10 @@ class VideosManager:
                 - %(playlist)s: 플레이리스트 이름 폴더로 나눔
                 - %(playlist)s (%(channel)s): '플레이리스트명 (채널명)'폴더에 저장
                 - %(channel)s/%(playlist)s: 채널명 폴더 내 플레이리스트 폴더에 저장
-                - (빈칸): 그냥 구별하는 폴더 없이 Videos 폴더에 영상을 저장
+                - (빈칸) 또는 .: 그냥 구별하는 폴더 없이 Videos 폴더에 영상을 저장
             additional_videos_dict_keys: 비디오스의 비디오 정보 딕셔너리에 추가할 키 값의 이름과 함수
             video_force_update: datas에 기록된 정보의 업데이트 여부. just_bring이면 정보를 기록하지 않음. true면 강제 업데이트, false면 최초 1회만 업데이트
-            download_archive_name: 
+            download_archive_type: 
                 - down_archive: 프로그램에 상관없이 폴더 내의 영상이 전부 한 아카이브에 저장
                 - %(playlist)s: 플레이리스트 별로 나뉨
                 - %(channel)s: 채널별로 나뉨
@@ -98,8 +95,7 @@ class VideosManager:
             default_styles: 표들의 스타일이 지정되지 않았을 경우 이 스타일로 일괄 지정
             playlist_videos_init_kwargs: 리스트 말고 키(비디오 딕셔너리):벨류 형태로도 지정 가능
         """
-        if not parent_file_dir:
-            parent_file_dir = parent_videos_dir
+        parent_file_dir = parent_file_dir.format(parent_videos_dir)
         self.data_path = f"{parent_file_dir}\\Data"
         self._thumbnail_path = f"{parent_file_dir}\\Thumbnails"
         self._video_path = f"{parent_videos_dir}\\Videos"
@@ -133,7 +129,7 @@ class VideosManager:
 
             videos.down_archive_path = self._down_archive_path
             # 이제 다운아카는 여기서 지정.
-            videos.down_archive_name = f"{download_archive_name}.archive"
+            videos.down_archive_name = f"{download_archive_type}.archive"
             # videos.custom_da_path = f"{self._down_archive_path}\\Custom_down_archives"
 
             if not videos.styles:  # 비디오스에 유저가 정한 스타일이 없다면
@@ -589,7 +585,7 @@ class VideosManager:
                             inner_folder=videos.inner_split_by,
                             thumbnail_path=videos.thumbnail_path,
                             download_archive_path=videos.down_archive_path,
-                            download_archive_name=videos.down_archive_name,
+                            download_archive_type=videos.down_archive_name,
                             temp_path=videos.temp_path,
                             split_chapters=videos.split_chapter,
                             restrict_format=restrict_format,
@@ -614,7 +610,7 @@ class VideosManager:
                             inner_folder=videos.inner_split_by,
                             thumbnail_path=videos.thumbnail_path,
                             download_archive_path=videos.down_archive_path,
-                            download_archive_name=videos.down_archive_name,
+                            download_archive_type=videos.down_archive_name,
                             temp_path=videos.temp_path,
                             split_chapters=videos.split_chapter if chapters else False,
                             progress_hook=my_hook,
