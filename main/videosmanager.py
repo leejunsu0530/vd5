@@ -59,18 +59,29 @@ from ..newtypes.ydl_types import (
 install(show_locals=True)
 
 
+class AdditionalKeys:
+    """추가 키 등도 따로 자료형으로 만들어서, 추가 및 삭제 등이 좀 더 간편하게 하기"""
+
+
 class VideosManager:
     def __init__(
         self,
         *playlist_videos_init: Videos | str,
         parent_videos_dir: str = f"{os.getcwd()}\\downloads",
         parent_file_dir: str = "{parent_videos_dir}",
-        video_save_dir_form: Literal["%(playlist)s", "%(playlist)s (%(channel)s)",
-                                     "%(channel)s/%(playlist)s", "."] | str = "%(playlist)s",
+        video_save_dir_form: Literal["%(playlist)s",
+                                     "%(playlist)s (%(channel)s)",
+                                     "%(channel)s/%(playlist)s",
+                                     ".",
+                                     "%(playlist)s (%(channel)s)/%(upload_date>%Y.%m)s",
+                                     "%(channel)s/%(playlist)s/%(upload_date>%Y.%m)s"
+                                     ] | str = "%(channel)s/%(playlist)s",
+        download_archive_type: Literal["down_archive",
+                                       "%(playlist)s (%(playlist_uploader)s)",
+                                       "%(channel)s",
+                                       "{FILE_NAME}"] | str = 'down_archive',
         additional_videos_dict_keys: dict[str,
                                           Callable[[VideoInfoDict], Any]] = None,
-        download_archive_type: Literal["down_archive",
-                                       "%(playlist)s (%(playlist_uploader)s)", "%(channel)s", "FILE_NAME"] | str = 'down_archive',
         video_force_update: bool | Literal["just_bring"] = False,
         default_styles: list[str | Style] = None,
     ):

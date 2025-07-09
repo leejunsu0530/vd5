@@ -69,29 +69,6 @@ class DictSetOperator:
 
         return intersection
 
-# # 정렬 등이 기능이 겹쳐서 여기서 할 까닭이 없음. 그냥 밑에서 업데이트를 잘 나누기
-# class VideoListsManageMixin:  # 이건 일단 추상화할 필요 x
-#     """list_all_videos를 관리하고 다른 리스트들로 분류함. 리스트들 정의는 여기서 안하고 자식에서."""
-#
-#     def _check_attr(self):
-#         """속성들이 메인에 정의되어 있는지 검사하는 메서드"""
-#
-#     def update(self):
-#         # 자신만의 업데이트 동작을 한 후 체인에 연결된 다음 믹스인의 업데이트 실행
-#         if hasattr(super(), "update"):
-#             super().update()
-#
-#
-# class DictListTransformMixin:
-#     """자르기, 필터링, 사칙연산은 아예 원본과 다른 정보의 객체를 만들어냄. sort는 여기서 정의 안하고, 이 위 믹스인에서 할지 메인에서 할지 고민중"""
-#
-#     def update(self): # 정렬, 새 객체의 정보 정리 등
-#         # 자신만의 업데이트 동작을 한 후 체인에 연결된 다음 믹스인의 업데이트 실행
-#         if hasattr(super(), "update"):
-#             super().update()
-#
-#     # 이제 이 아래에 cut, 필터링, 사칙연산 끌고 와야 하는데, 일단 밑에 정리 좀 하고
-
 
 @dataclass
 class TableKey:
@@ -125,7 +102,7 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
 
     @property
     @abstractmethod
-    def videos_list(self) -> list["Videos"]:
+    def list_videos_instance_for_table(self) -> list["Videos"]:
         """return [self]같은 식으로 재정의"""
 
     def print_table(self,
@@ -170,8 +147,8 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
         # columns에서 일반 색/어두운 색으로 구체화 << 이거 보기에 안좋아서 그냥 box.HEAVY_HEAD로 줄 나눔
 
         # 만약 비디오스에서 호출한거면 정렬순으로 강조
-        if len(self.videos_list) == 1:
-            sort_key, sort_reverse = self.videos_list[0].sort_by
+        if len(self.list_videos_instance_for_table) == 1:
+            sort_key, sort_reverse = self.list_videos_instance_for_table[0].sort_by
             if sort_key in columns:
                 idx = _columns_str.index(sort_key)
                 arrow = "▼" if sort_reverse else "▲"
@@ -179,14 +156,14 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
                     f"[bold bright_magenta]{columns[idx]}{arrow}[/]")
 
             # 일단 pl_folder_name을 사용하는 쪽으로 지정.
-            title = f"{self.videos_list[0].pl_folder_name} Table"
+            title = f"{self.list_videos_instance_for_table[0].pl_folder_name} Table"
         else:
             title = "Total Table"
 
         # 캡션 달기
         caption = ""
         table_infos: list[dict] = []
-        for videos in self.videos_list:
+        for videos in self.list_videos_instance_for_table:
             caption += f"{videos.format_table_info()}\n"  # 색은 저쪽에서 자동으로 입혀줌
             table_infos.append(videos.calculate_table_info())
         total_table_info = dict(sum((Counter(i)
@@ -210,7 +187,7 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
             def restrict(d) -> Literal[True]:  # pylint: disable=unused-argument
                 return True
         row_styles: list[Style] = []
-        for videos in self.videos_list:
+        for videos in self.list_videos_instance_for_table:
             info_dict_list = [
                 video_dict for video_dict in videos.list_all_videos if restrict(video_dict)]
             self._make_table(table, info_dict_list,
@@ -226,7 +203,7 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
                     latest_idx: list[int],
                     row_styles: list[Style]) -> None:
         """색을 입혀서 열을 지정. 캡션은 밖에서 처리. idx는 밖에서 받아오기"""
-        # 색은 직접 글씨에 입힘. 배경에도 색 입혀야 함 << 끊기거나 덮일까봐, 그냥 밖에서 리스트 두고 스타일을 하나씩 넣은 뒤 나중에 row_styles에 반영
+        # 색은 끊기거나 덮일까봐, 그냥 밖에서 리스트 두고 스타일을 하나씩 넣은 뒤 나중에 row_styles에 반영
         for video_dict in info_dict_list:  # 각 비디오 딕셔너리마다
             row_style = next(colors)
             row: list[Any] = latest_idx[:]
@@ -270,9 +247,17 @@ class Videos(VideosTableMixin):
             self.color_list: list[Style] = [s if isinstance(
                 s, Style) else Style.parse(s) for s in styles]
             self.color: Style = self.color_list[0]
+            self.need_setting = True if self.color_list == (
+                "none", "dim") else False
 
-        def update(self):
-            """이번에는 스타일스가 한칸짜리면 그냥 냅두기(dim은 열 표기에 사용됨)"""
+        def update(self, styles: list[Style | str] | tuple[Style | str, ...] | None = None):
+            """이번에는 스타일스가 한칸짜리면 그냥 냅두기. 이래도 상관 없을 듯. 
+            업데이트는 매번 호출하는 게 아니라 한번만 해도 되지 않을까?
+            styles 인자는 재설정시 사용
+            """
+            if styles is not None:
+                self.color_list = [s if isinstance(
+                    s, Style) else Style.parse(s) for s in styles]
             self.color_list = [s if isinstance(
                 s, Style) else Style.parse(s) for s in self.color_list]
             self.color = self.color_list[0]
@@ -296,42 +281,57 @@ class Videos(VideosTableMixin):
             self.repeated: list[VideoInfoDict | EntryInPlaylist] = []
 
     class _DownArchive:
-        def __init__(self, dir_: str = "", type_: str = "") -> None:
-            self.down_archive_dir = dir_
-            self.down_archive_type = type_
+        def __init__(self) -> None:
+            """여기에 % playlist_info_dict 해야 하는데, 그건 나중에 다운로더에 전달할 때 한꺼번에 함(객체를 더하거나 할 때 바뀔 수 있음)"""
+            self.down_archive_path: Path = Path()  # 전체 경로
 
-        def inherit_other_da(self):
-            pass
+        def set_init(self, dir_: str | Path, type_: str):
+            self.down_archive_path = Path(dir_, f"{type_}.archive")
+
+        def inherit_other_da(self, other: "Videos._DownArchive") -> None:
+            """다른 da로 덮어씌움"""
+            other_file = other.down_archive_path.read_text("utf-8")
+
+            self.down_archive_path.write_text(other_file, "utf-8")
+
+        def sum_with_other_da(self, other: "Videos._DownArchive") -> None:
+            """다른 da와 합침"""
+            other_file = other.down_archive_path.read_text("utf-8")
+            other_lines = other_file.splitlines()
+            self_file = other.down_archive_path.read_text("utf-8")
+            self_lines = self_file.splitlines()
+
+            new_self_text = "\n".join(set(other_lines + self_lines))
+            self.down_archive_path.write_text(new_self_text, "utf-8")
 
         def bring_id_list(self) -> list[str]:
-            """파일 읽어오기,, 딕셔너리에 is_da넣기"""
-            down_archive = read_str_from_file(
-                f"{self.down_archive_dir}\\{self.down_archive_dir}")
-            if down_archive:  # if 안붙이면 마지막줄에 공백에서 오류
-                return [line.split()[1] for line in down_archive.split("\n") if line]
-            else:
-                return []
+            """파일 읽어오기. 딕셔너리에 is_da넣기는 아래에서"""
+            da_lines = self.down_archive_path.read_text("utf-8").splitlines()
+            return [line.split(" ")[1] for line in da_lines if line]
 
-        def check_is_downloaded(self, id_to_check: str):
-            pass
-
-        def del_(self, id_: str):  # 이건 만드려면 da 재작성도 정의 필요
-            pass
-        # 무결성은 과하다 싶은데, 할일도 많고 멍청하게 다 지워버리지 않는 한 의미도 적음
+        def check_is_downloaded(self, id_to_check: str) -> bool:
+            return id_to_check in self.bring_id_list()
 
     def __init__(
         self,
         playlist_url: str,
         video_bring_restrict: Callable[[EntryInPlaylist], bool] = None,
         playlist_title: str = "",
-        inner_folder_split: Literal["%(upload_date>%Y.%m)s",
-                                    "%(uploader)s", "%(playlist)s"] | str = "",
-        styles: list[Style | str] | Style | str | None = None,
+        # inner_folder_split: Literal["%(upload_date>%Y.%m)s",
+        #                             "%(uploader)s", "%(playlist)s"] | str = "",
+        video_save_dir_form: Literal["%(playlist)s",
+                                     "%(playlist)s (%(channel)s)",
+                                     "%(channel)s/%(playlist)s",
+                                     ".",
+                                     "%(playlist)s (%(channel)s)/%(upload_date>%Y.%m)s",
+                                     "%(channel)s/%(playlist)s/%(upload_date>%Y.%m)s"
+                                     ] | str | Literal["NONE"] = "NONE",  # 따로 설정할 경우
+        colors: list[Style | str] | tuple[Style | str] | None = None,
         split_chapter: bool = False,
         update_playlist_data: bool = True,
         # custom_da: bool = False,
-        artist_name: str = "",
-        album_title: str = "",
+        # artist_name: str = "",
+        # album_title: str = "",
     ):
         """
         비디오스 객체의 da_name이 'custom'이거나 none이면 커스텀 경로로 지정됨
@@ -350,12 +350,16 @@ class Videos(VideosTableMixin):
         """
         # 메니져가 정의해주는 변수
         self.playlist_info_dict: ChannelInfoDict | PlaylistInfoDict = {}
-        self.down_archive = self._DownArchive()
-        self.channel_name = ""
-        self.video_path = ""
-        self.thumbnail_path = ""
-        self.error_path = ""
-        self.temp_path = ""
+        self.down_archive = self._DownArchive()  # set_init 해야 함
+        # self.channel_name = "" # 아마 pl_info_dict에서 가져오기
+        self.video_save_dir_form = video_save_dir_form  # NONE이면 밖에서 설정
+
+        self.video_path: Path = Path()
+        self.thumbnail_path: Path = Path()
+        self.error_path: Path = Path()
+        self.temp_path: Path = Path()
+
+        self.videos_list = self._VideoList()
 
         def check_is_repeated(video_dict: VideoInfoDict) -> bool:
             # 기존은 list_not_repeated 정의하고 for문 돌면서 넣은 뒤 이 리스트에 있으면 중복에 넣고 이 리스트로 다운 가능/불가능 정했었음.
@@ -383,12 +387,6 @@ class Videos(VideosTableMixin):
         self.artist = artist_name
         self.album = album_title
 
-        self.list_all_videos: list[VideoInfoDict | EntryInPlaylist] = []
-        self.list_can_download: list[VideoInfoDict | EntryInPlaylist] = []
-        # 비공개, 맴버십 온리, 최초공개 등.
-        self.list_cannot_download: list[VideoInfoDict | EntryInPlaylist] = []
-        self.list_repeated: list[VideoInfoDict | EntryInPlaylist] = []  # 중복 id
-
         self.sort_by: tuple[str, bool] = (
             "upload_date", False)  # 기본으로 업로드 날짜, 내림차순 정렬
 
@@ -402,6 +400,39 @@ class Videos(VideosTableMixin):
 
         # self.style: Style | str = self.styles[0] if self.styles else "none"
         self.colors = self._Colors()
+
+    def set_init(self, *,
+                 file_dir: Path,
+                 video_dir: Path,
+                 thumbnail_path: Path,
+                 video_save_dir_form: Literal["%(playlist)s",
+                                              "%(playlist)s (%(channel)s)",
+                                              "%(channel)s/%(playlist)s",
+                                              ".",
+                                              "%(playlist)s (%(channel)s)/%(upload_date>%Y.%m)s",
+                                              "%(channel)s/%(playlist)s/%(upload_date>%Y.%m)s"
+                                              ] | str,
+                 download_archive_type: Literal["down_archive",
+                                                "%(playlist)s (%(playlist_uploader)s)",
+                                                "%(channel)s",
+                                                "{FILE_NAME}"] | str,
+                 color_list: list[Style | str]
+                 ):
+        """
+        경로 외에도 메니져에서 넣어야 하는 걸 여기서 받음. 이 함수는 VDM에서 실행.
+        경로를 하나하나 메니져에서 지정하는 게 아니라 주어진 것들로 여기서 만듦.
+        """
+        if self.video_save_dir_form == "NONE":
+            self.video_save_dir_form = video_save_dir_form
+        self.video_path = file_dir/"Videos"/self.video_save_dir_form
+        self.thumbnail_path = thumbnail_path  # 이건 채널 썸내일 페스로도 쓰이니까 밖에서 가져옴
+        self.error_path = file_dir/"Errors"/self.video_save_dir_form
+        self.temp_path = video_dir/"Temp"
+        self.down_archive.set_init(
+            file_dir/"Download_archive", download_archive_type)
+        if self.colors.need_setting:
+            self.colors.update(color_list)
+        # 이 아래에 다른 것들은 수정하다가 점차 추가. 예를 들어 추가 키 같은 건 아직 VDM에서도 구체화가 안됐으니까
 
     def change_value(
         self,
