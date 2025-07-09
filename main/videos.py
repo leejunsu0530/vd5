@@ -102,7 +102,7 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
 
     @property
     @abstractmethod
-    def list_videos_instance_for_table(self) -> list["Videos"]:
+    def videos_list_for_table(self) -> list["Videos"]:
         """return [self]같은 식으로 재정의"""
 
     def print_table(self,
@@ -147,8 +147,8 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
         # columns에서 일반 색/어두운 색으로 구체화 << 이거 보기에 안좋아서 그냥 box.HEAVY_HEAD로 줄 나눔
 
         # 만약 비디오스에서 호출한거면 정렬순으로 강조
-        if len(self.list_videos_instance_for_table) == 1:
-            sort_key, sort_reverse = self.list_videos_instance_for_table[0].sort_by
+        if len(self.videos_list_for_table) == 1:
+            sort_key, sort_reverse = self.videos_list_for_table[0].sort_by
             if sort_key in columns:
                 idx = _columns_str.index(sort_key)
                 arrow = "▼" if sort_reverse else "▲"
@@ -156,14 +156,14 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
                     f"[bold bright_magenta]{columns[idx]}{arrow}[/]")
 
             # 일단 pl_folder_name을 사용하는 쪽으로 지정.
-            title = f"{self.list_videos_instance_for_table[0].pl_folder_name} Table"
+            title = f"{self.videos_list_for_table[0].pl_folder_name} Table"
         else:
             title = "Total Table"
 
         # 캡션 달기
         caption = ""
         table_infos: list[dict] = []
-        for videos in self.list_videos_instance_for_table:
+        for videos in self.videos_list_for_table:
             caption += f"{videos.format_table_info()}\n"  # 색은 저쪽에서 자동으로 입혀줌
             table_infos.append(videos.calculate_table_info())
         total_table_info = dict(sum((Counter(i)
@@ -187,13 +187,13 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
             def restrict(d) -> Literal[True]:  # pylint: disable=unused-argument
                 return True
         row_styles: list[Style] = []
-        for videos in self.list_videos_instance_for_table:
+        for videos in self.videos_list_for_table:
             info_dict_list = [
-                video_dict for video_dict in videos.list_all_videos if restrict(video_dict)]
+                video_dict for video_dict in videos.videos_list.all_videos if restrict(video_dict)]
             self._make_table(table, info_dict_list,
                              videos.colors, new_keys, index, row_styles)
-
         table.row_styles = row_styles
+
         my_console.print(table)
 
     def _make_table(self, table: Table,
@@ -221,9 +221,13 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
                 row_style += Style(bgcolor="green")
             row_styles.append(row_style)
 
-    def calculate_table_info(self) -> dict:
+    def calculate_table_info(self, ) -> dict:
         """자신 비디오스의 종류별 영상 갯수 등을 세서 정보를 딕셔너리로 반환하는 함수"""
-        return {}
+        # 이거 비디오스에 따라 달라야 하니까 함수 수정 필요
+        table_info: dict = {
+
+        }
+        return table_info
 
     def format_table_info(self, table_info: dict = None) -> str:
         """딕셔너리로 받은 정보에 rich 형식으로 색 입혀서 내보내는 함수. 이 함수의 기능이 필요할 시 table_info에 값을 전달하여 사용"""
@@ -317,8 +321,6 @@ class Videos(VideosTableMixin):
         playlist_url: str,
         video_bring_restrict: Callable[[EntryInPlaylist], bool] = None,
         playlist_title: str = "",
-        # inner_folder_split: Literal["%(upload_date>%Y.%m)s",
-        #                             "%(uploader)s", "%(playlist)s"] | str = "",
         video_save_dir_form: Literal["%(playlist)s",
                                      "%(playlist)s (%(channel)s)",
                                      "%(channel)s/%(playlist)s",
@@ -329,9 +331,7 @@ class Videos(VideosTableMixin):
         colors: list[Style | str] | tuple[Style | str] | None = None,
         split_chapter: bool = False,
         update_playlist_data: bool = True,
-        # custom_da: bool = False,
-        # artist_name: str = "",
-        # album_title: str = "",
+
     ):
         """
         비디오스 객체의 da_name이 'custom'이거나 none이면 커스텀 경로로 지정됨
@@ -351,15 +351,15 @@ class Videos(VideosTableMixin):
         # 메니져가 정의해주는 변수
         self.playlist_info_dict: ChannelInfoDict | PlaylistInfoDict = {}
         self.down_archive = self._DownArchive()  # set_init 해야 함
-        # self.channel_name = "" # 아마 pl_info_dict에서 가져오기
-        self.video_save_dir_form = video_save_dir_form  # NONE이면 밖에서 설정
 
+        self.video_save_dir_form = video_save_dir_form  # NONE이면 밖에서 설정
         self.video_path: Path = Path()
         self.thumbnail_path: Path = Path()
         self.error_path: Path = Path()
         self.temp_path: Path = Path()
 
         self.videos_list = self._VideoList()
+        self.colors = self._Colors()
 
         def check_is_repeated(video_dict: VideoInfoDict) -> bool:
             # 기존은 list_not_repeated 정의하고 for문 돌면서 넣은 뒤 이 리스트에 있으면 중복에 넣고 이 리스트로 다운 가능/불가능 정했었음.
@@ -399,7 +399,6 @@ class Videos(VideosTableMixin):
                 self.styles = [styles, Style(dim=True) + Style.parse(styles)]
 
         # self.style: Style | str = self.styles[0] if self.styles else "none"
-        self.colors = self._Colors()
 
     def set_init(self, *,
                  file_dir: Path,
