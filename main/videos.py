@@ -221,21 +221,6 @@ class VideosTableMixin(ABC):  # 이건 메니져에서도 상속.
                 row_style += Style(bgcolor="green")
             row_styles.append(row_style)
 
-    def calculate_table_info(self, ) -> dict:
-        """자신 비디오스의 종류별 영상 갯수 등을 세서 정보를 딕셔너리로 반환하는 함수"""
-        # 이거 비디오스에 따라 달라야 하니까 함수 수정 필요
-        table_info: dict = {
-
-        }
-        return table_info
-
-    def format_table_info(self, table_info: dict = None) -> str:
-        """딕셔너리로 받은 정보에 rich 형식으로 색 입혀서 내보내는 함수. 이 함수의 기능이 필요할 시 table_info에 값을 전달하여 사용"""
-        if table_info is None:
-            table_info = self.calculate_table_info()
-
-        return "test"
-
 
 class Videos(VideosTableMixin):
     """메인에서 업데이트 호출 > 
@@ -328,7 +313,7 @@ class Videos(VideosTableMixin):
                                      "%(playlist)s (%(channel)s)/%(upload_date>%Y.%m)s",
                                      "%(channel)s/%(playlist)s/%(upload_date>%Y.%m)s"
                                      ] | str | Literal["NONE"] = "NONE",  # 따로 설정할 경우
-        colors: list[Style | str] | tuple[Style | str] | None = None,
+        colors: list[Style | str] | tuple[Style | str] = ("none", "dim"),
         split_chapter: bool = False,
         update_playlist_data: bool = True,
 
@@ -359,7 +344,7 @@ class Videos(VideosTableMixin):
         self.temp_path: Path = Path()
 
         self.videos_list = self._VideoList()
-        self.colors = self._Colors()
+        self.colors = self._Colors(colors)
 
         def check_is_repeated(video_dict: VideoInfoDict) -> bool:
             # 기존은 list_not_repeated 정의하고 for문 돌면서 넣은 뒤 이 리스트에 있으면 중복에 넣고 이 리스트로 다운 가능/불가능 정했었음.
@@ -662,74 +647,29 @@ class Videos(VideosTableMixin):
 
         return new_videos_to_return
 
-    def show_table(
-        self,
-        keys_to_show: list[
-            MAJOR_KEYS | tuple[MAJOR_KEYS,
-                               Callable[[str | int | float | Any], str]]
-        ] = None,
-        show_lines: bool = False,
-        show_edges: bool = True,
-        print_: bool = True,
-        restrict: Callable[[InfoDict], bool] = None,
-    ) -> Table:
-        """
-        keys_to_show는 키 이름 또는 (키 이름,값에 적용할 함수명) 리스트임. 키가 없을 경우 Unknown반환.
-        기본 keys_to_show:
-        keys_to_show = [
-            'title',
-            ('upload_date', format_date),
-            ('view_count', format_number),
-            ('like_count', format_number),
-            ('duration', format_time),
-            ('filesize_approx', format_byte_str)]
-        restrict: 예를 들어 lambda dict_: dict.get('availability') == 'public'
-        다운아카 여부는 'is_downloaded'로 접근 가능
-        Return:
-            table
-        """
-        self.update()
-        title = self.pl_folder_name
-        can_dl_len, cannot_dl_len, can_dl_filesize_sum = self.calculate_table_info()
-        caption = (
-            f"[{self.style}]다운로드 가능 영상 수[/]: {can_dl_len}, "
-            f"[{self.style}]다운로드 불가능 영상 수[/]: {cannot_dl_len}, "
-            f"[{self.style}]총 용량[/]: {format_byte_str(can_dl_filesize_sum)}"
-        )
+    def calculate_table_info(self) -> dict:
+        """자신 비디오스의 종류별 영상 갯수 등을 세서 정보를 딕셔너리로 반환하는 함수"""
+        # 이거 비디오스에 따라 달라야 하니까 함수 수정 필요
+        table_info: dict[Literal["all_len", "can_dl_len", "cannot_dl_len",
+                                 "downloaded_len", "repeated_len",
+                                 "can_dl_filesize_sum"],
+                         int] = {
+            "all_len": len(self.videos_list.all_videos),
+            "can_dl_len": len(self.videos_list.can_download),
+            "cannot_dl_len": len(self.videos_list.cannot_download),
+            "downloaded_len": len(self.videos_list.downloaded),
+            "repeated_len": len(self.videos_list.repeated),
+            "can_dl_filesize_sum": sum([v.get("filesize_approx", 0) for v in self.videos_list.can_download])
 
-        table = make_info_table(
-            video_list=self.list_all_videos,
-            keys_to_show=keys_to_show,
-            title=title if print_ else None,
-            caption=caption if print_ else None,
-            style=self.style,
-            row_style=self.styles[:3],
-            print_=print_,
-            print_title_and_caption=True,
-            show_lines=show_lines,
-            show_edges=show_edges,
-            restrict=restrict,
-            sort_by=self.sort_by,
-        )
-        # print_ 안하면 제목도 안나옴
-        return table
+        }
+        return table_info
 
-    # def calculate_table_info(self) -> tuple[int, int, int]:
-        # """
-        # Return:
-        # can_dl_len, cannot_dl_len, can_dl_filesize_sum(not formated)
-        # """
-        # can_dl_len = len(self.list_can_download)
-        # cannot_dl_len = len(self.list_cannot_download)
-        # can_dl_filesize_sum = sum(
-        # [
-        # video_dict.get("filesize_approx", 0)
-        # for video_dict in self.list_can_download
-        # if isinstance(video_dict.get("filesize_approx", 0), int)
-        # ]
-        # )
-#
-        # return can_dl_len, cannot_dl_len, can_dl_filesize_sum
+    def format_table_info(self, table_info: dict = None) -> str:
+        """딕셔너리로 받은 정보에 rich 형식으로 색 입혀서 내보내는 함수. 이 함수의 기능이 필요할 시 table_info에 값을 전달하여 사용"""
+        if table_info is None:
+            table_info = self.calculate_table_info()
+
+        return "test"
 
     # 연산(합,차,교집합)함수: 집합으로 연산한 후 순서 재정렬해야 함. 필터가 클래스를 반환하는지 리스트를 반환하는지에 따라 이거에 클래스를 넣을지 리스트를 넣을지 달라짐.
     def __add__(self, other: "Videos") -> "Videos":
