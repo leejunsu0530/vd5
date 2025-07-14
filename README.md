@@ -1,6 +1,6 @@
 # README
 
-노션에서 보기: [https://icy-puppet-ec6.notion.site/README-22dc7b1bc4808023a415d1060d6ef564?pvs=73](README%2022dc7b1bc4808023a415d1060d6ef564.md)
+노션에서 보기: 현재 링크가 잘 작동하지 않는다. [https://icy-puppet-ec6.notion.site/README-22dc7b1bc4808023a415d1060d6ef564?pvs=73](README%2022dc7b1bc4808023a415d1060d6ef564.md)
 
 [https://github.com/leejunsu0530/vd5](https://github.com/leejunsu0530/vd5)
 
